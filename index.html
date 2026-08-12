@@ -775,6 +775,22 @@ function openInvoicesFor(clientId){
   return DB.invoices.filter(i=>i.clientId===clientId && i.status!=='void' && invoiceBalance(i)>0.005)
     .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
 }
+/* Balance of an invoice using only payments/credits dated on or before asOf. */
+function invoiceBalanceAsOf(inv, asOf){
+  if(inv.status==='void') return 0;
+  const paid = DB.payments.reduce((s,p)=> s + (((p.date||'')<=asOf) ? paymentAppliedTo(p,inv.id) : 0), 0)
+    + DB.trust.filter(t=>t.invoiceId===inv.id && t.type==='apply' && (t.date||'')<=asOf).reduce((s,t)=>s+t.amount,0);
+  return round2((inv.grandTotal||0) - paid);
+}
+/* Snapshot of a client's outstanding prior invoices as of a date (for "Previous Balance"). */
+function prevBalanceSnapshot(clientId, asOf, excludeInvId){
+  const priors = DB.invoices
+    .filter(i=>i.clientId===clientId && i.id!==excludeInvId && i.status!=='void' && (i.date||'')<=asOf)
+    .map(i=>({id:i.id, number:i.number, date:i.date, matterNames:i.matterNames, balance:invoiceBalanceAsOf(i, asOf)}))
+    .filter(x=>x.balance>0.005)
+    .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  return {prevBalance:round2(priors.reduce((s,x)=>s+x.balance,0)), priors};
+}
 
 /* ---- New-invoice flow: pick client + matters, select unbilled entries ---- */
 function newInvoiceFlow(){
@@ -844,10 +860,13 @@ function createInvoice(sel){
     entryIds,
     discountSnapshot: JSON.parse(JSON.stringify(client.discount||{type:'none'})),
     discountOverride:{mode:'auto', tierId:'', customPct:0, keepAvailable:false}, // auto | none | tier | custom
-    priorBalance:0,
     status:'open', createdAt:todayISO()
   };
   computeInvoiceTotals(inv);
+  // Snapshot the previous balance (client's other outstanding invoices) as of this invoice's date.
+  const snap = prevBalanceSnapshot(inv.clientId, inv.date, inv.id);
+  inv.prevBalance = snap.prevBalance;
+  inv.priorSnapshot = snap.priors;
   DB.invoices.push(inv);
   entryIds.forEach(id=>{ const e=DB.entries.find(x=>x.id===id); if(e) e.invoiceId=inv.id; });
   save();
@@ -1198,11 +1217,14 @@ function openInvoiceDoc(invId){
   const b=invoiceBreakdown(inv);
   const paid=invoicePaid(inv), bal=invoiceBalance(inv);
 
-  // running balance owed = this invoice + all other outstanding invoices for the client
-  const priorInvoices = DB.invoices
-    .filter(i=>i.clientId===inv.clientId && i.id!==inv.id && i.status!=='void' && invoiceBalance(i)>0.005)
-    .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
-  const prevBalance = round2(priorInvoices.reduce((s,i)=>s+invoiceBalance(i),0));
+  // Previous balance is a snapshot captured at invoice creation, as of the invoice date.
+  // Migrate any older invoice that predates snapshots by freezing one now.
+  if(inv.priorSnapshot===undefined){
+    const snap = prevBalanceSnapshot(inv.clientId, inv.date, inv.id);
+    inv.prevBalance = snap.prevBalance; inv.priorSnapshot = snap.priors; save();
+  }
+  const priorInvoices = inv.priorSnapshot || [];
+  const prevBalance = round2(inv.prevBalance||0);
   const totalOwed = round2(prevBalance + bal);
 
   const trustBal = trustBalance(inv.clientId);
@@ -1231,11 +1253,11 @@ function openInvoiceDoc(invId){
   const priorSection = priorInvoices.length ? `
     <table style="margin-top:16px">
       <thead>
-        <tr class="sec-title"><td colspan="4">Previous Balance — Prior Outstanding Invoices</td></tr>
+        <tr class="sec-title"><td colspan="4">Previous Balance — Prior Outstanding Invoices (as of ${fmtDate(inv.date)})</td></tr>
         <tr><th style="width:90px">Invoice</th><th style="width:80px">Date</th><th>Matter(s)</th><th class="num" style="width:90px">Balance</th></tr>
       </thead>
       <tbody>
-        ${priorInvoices.map(i=>`<tr><td>${esc(i.number)}</td><td class="nowrap">${fmtDate(i.date)}</td><td>${esc(i.matterNames||'')}</td><td class="num">${money(invoiceBalance(i))}</td></tr>`).join('')}
+        ${priorInvoices.map(i=>`<tr><td>${esc(i.number)}</td><td class="nowrap">${fmtDate(i.date)}</td><td>${esc(i.matterNames||'')}</td><td class="num">${money(i.balance)}</td></tr>`).join('')}
         <tr class="subtot"><td colspan="3" class="num">Previous Balance</td><td class="num">${money(prevBalance)}</td></tr>
       </tbody>
     </table>` : '';
@@ -1287,7 +1309,7 @@ function openInvoiceDoc(invId){
         <tr class="rule"><td>Current Charges</td><td>${money(b.grandTotal)}</td></tr>
         ${paid>0?`<tr><td>Payments &amp; credits applied to this invoice</td><td>-${money(paid)}</td></tr>
         <tr><td>Balance, this invoice</td><td>${money(bal)}</td></tr>`:''}
-        ${prevBalance>0.005?`<tr><td>Previous balance (prior invoices)</td><td>${money(prevBalance)}</td></tr>`:''}
+        ${prevBalance>0.005?`<tr><td>Previous balance (as of ${fmtDate(inv.date)})</td><td>${money(prevBalance)}</td></tr>`:''}
         <tr class="grand"><td>Total Balance Due</td><td>${money(totalOwed)}</td></tr>
       </table>
 

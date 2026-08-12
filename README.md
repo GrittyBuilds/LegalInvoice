@@ -46,7 +46,9 @@ styled to the **CM Advisory Corp brand** (emerald/gold, Poppins, brand lockup
 masthead), with:
 - A **Current Charges / Previous Balance / Total Balance Due** summary band — every
   invoice shows the client's full **running balance owed**, and itemizes the prior
-  outstanding invoices that make up the previous balance.
+  outstanding invoices that make up the previous balance. The **previous balance is
+  a snapshot captured as of the invoice date** and frozen, so reprinting an old
+  invoice shows what was owed then (later payments don't change it).
 - When a client has several matters, line items are **grouped by matter**, each with
   its own Hourly/Fixed/Expense sub-sections and a matter subtotal.
 - Separate **Hourly Fees**, **Fixed Fees**, and **Expenses** sections + subtotals.
