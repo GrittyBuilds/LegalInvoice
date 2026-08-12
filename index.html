@@ -1,0 +1,1337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Legal Billing &amp; Trust Manager</title>
+<style>
+  :root{
+    --bg:#f4f5f7; --panel:#ffffff; --ink:#1d2733; --muted:#6b7683;
+    --line:#dfe3e8; --accent:#1f4e79; --accent2:#2e6da4; --accent-soft:#eaf1f8;
+    --good:#1e7e46; --good-soft:#e8f5ee; --warn:#8a6d00; --warn-soft:#fdf6e3;
+    --bad:#a8321f; --bad-soft:#fbeae7; --nc:#7a4fb5; --nc-soft:#f2ecfa;
+    --radius:8px; --shadow:0 1px 3px rgba(20,30,45,.08),0 1px 2px rgba(20,30,45,.06);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg); color:var(--ink); font-size:14px; line-height:1.45;}
+  h1,h2,h3,h4{margin:0 0 .4em; font-weight:600; line-height:1.25;}
+  a{color:var(--accent2);}
+  button{font-family:inherit; font-size:13px; cursor:pointer;}
+  input,select,textarea{font-family:inherit; font-size:13px; color:var(--ink);
+    padding:7px 9px; border:1px solid var(--line); border-radius:6px; background:#fff; width:100%;}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--accent-soft); border-color:var(--accent2);}
+  textarea{resize:vertical; min-height:60px;}
+  label{display:block; font-size:12px; color:var(--muted); margin:0 0 3px; font-weight:500;}
+  .btn{background:var(--accent); color:#fff; border:1px solid var(--accent); padding:8px 14px;
+    border-radius:6px; font-weight:500;}
+  .btn:hover{background:var(--accent2);}
+  .btn.sec{background:#fff; color:var(--accent); border-color:var(--line);}
+  .btn.sec:hover{border-color:var(--accent2); background:var(--accent-soft);}
+  .btn.ghost{background:transparent; color:var(--muted); border-color:transparent; padding:5px 8px;}
+  .btn.ghost:hover{color:var(--ink); background:#eef0f3;}
+  .btn.danger{background:#fff; color:var(--bad); border-color:var(--line);}
+  .btn.danger:hover{background:var(--bad-soft); border-color:var(--bad);}
+  .btn.sm{padding:5px 9px; font-size:12px;}
+  .tag{display:inline-block; font-size:11px; padding:2px 8px; border-radius:20px; font-weight:600; white-space:nowrap;}
+  .tag.good{background:var(--good-soft); color:var(--good);}
+  .tag.warn{background:var(--warn-soft); color:var(--warn);}
+  .tag.bad{background:var(--bad-soft); color:var(--bad);}
+  .tag.nc{background:var(--nc-soft); color:var(--nc);}
+  .tag.info{background:var(--accent-soft); color:var(--accent);}
+  .tag.gray{background:#eceef1; color:var(--muted);}
+
+  /* Layout */
+  #app{display:flex; min-height:100vh;}
+  #side{width:220px; background:#132c45; color:#c9d6e4; flex:0 0 220px; padding:0; position:sticky; top:0; height:100vh; overflow:auto;}
+  #side .brand{padding:18px 18px 14px; border-bottom:1px solid rgba(255,255,255,.08);}
+  #side .brand b{color:#fff; font-size:15px; display:block;}
+  #side .brand span{font-size:11px; color:#8fa6bf;}
+  #side nav{padding:10px 0;}
+  #side nav a{display:flex; align-items:center; gap:10px; padding:10px 18px; color:#c9d6e4; text-decoration:none; font-size:13.5px; cursor:pointer; border-left:3px solid transparent;}
+  #side nav a:hover{background:rgba(255,255,255,.05); color:#fff;}
+  #side nav a.active{background:rgba(46,109,164,.28); color:#fff; border-left-color:var(--accent2); font-weight:600;}
+  #side nav a .ic{width:18px; text-align:center; opacity:.9;}
+  #main{flex:1; min-width:0; padding:24px 30px 60px; max-width:1180px;}
+  .topbar{display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; gap:12px; flex-wrap:wrap;}
+  .topbar h1{font-size:22px; margin:0;}
+  .topbar .sub{color:var(--muted); font-size:12.5px;}
+
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:18px; margin-bottom:18px;}
+  .card h3{font-size:15px; display:flex; align-items:center; gap:8px; justify-content:space-between;}
+  .card h3 .r{font-weight:400;}
+  .grid{display:grid; gap:12px;}
+  .g2{grid-template-columns:1fr 1fr;}
+  .g3{grid-template-columns:1fr 1fr 1fr;}
+  .g4{grid-template-columns:repeat(4,1fr);}
+  @media(max-width:760px){.g2,.g3,.g4{grid-template-columns:1fr;}}
+  .row{display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;}
+  .muted{color:var(--muted);}
+  .small{font-size:12px;}
+  .right{text-align:right;}
+  .center{text-align:center;}
+  .nowrap{white-space:nowrap;}
+  .spacer{flex:1;}
+  .hr{height:1px; background:var(--line); margin:14px 0; border:0;}
+  .pill-row{display:flex; gap:8px; flex-wrap:wrap;}
+
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  th{text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.03em; color:var(--muted); font-weight:600; padding:8px 10px; border-bottom:2px solid var(--line);}
+  td{padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top;}
+  tr:last-child td{border-bottom:none;}
+  tbody tr:hover{background:#fafbfc;}
+  td.num,th.num{text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap;}
+  .empty{padding:30px; text-align:center; color:var(--muted); font-style:italic;}
+
+  .stat{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:14px 16px; box-shadow:var(--shadow);}
+  .stat .k{font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); font-weight:600;}
+  .stat .v{font-size:22px; font-weight:700; margin-top:4px; font-variant-numeric:tabular-nums;}
+  .stat .v.small{font-size:16px;}
+
+  /* Modal */
+  .modal-bg{position:fixed; inset:0; background:rgba(15,25,40,.5); display:flex; align-items:flex-start; justify-content:center; padding:40px 16px; z-index:100; overflow:auto;}
+  .modal{background:#fff; border-radius:10px; width:100%; max-width:720px; box-shadow:0 20px 60px rgba(0,0,0,.3); overflow:hidden;}
+  .modal.wide{max-width:920px;}
+  .modal .mh{padding:16px 20px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center;}
+  .modal .mh h3{margin:0; font-size:16px;}
+  .modal .mb{padding:20px; max-height:70vh; overflow:auto;}
+  .modal .mf{padding:14px 20px; border-top:1px solid var(--line); display:flex; justify-content:flex-end; gap:10px; background:#fafbfc;}
+  .x{background:none; border:none; font-size:22px; color:var(--muted); cursor:pointer; line-height:1;}
+
+  .chk{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--ink);}
+  .chk input{width:auto;}
+  .fieldset{border:1px solid var(--line); border-radius:6px; padding:12px; margin-top:8px;}
+  .fieldset legend{font-size:12px; color:var(--muted); font-weight:600; padding:0 6px;}
+  .tier-row{display:grid; grid-template-columns:1.6fr .7fr 1.4fr auto auto; gap:8px; align-items:center; margin-bottom:8px;}
+  @media(max-width:760px){.tier-row{grid-template-columns:1fr 1fr;}}
+
+  .subhead{font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); font-weight:700; margin:18px 0 8px; padding-bottom:5px; border-bottom:1px solid var(--line);}
+
+  /* ===== Print document (invoice / statement / retainer) ===== */
+  #docwrap{background:#525659; padding:24px; display:none;}
+  #docwrap.show{display:block;}
+  .doc{background:#fff; max-width:8.5in; margin:0 auto 20px; padding:0.7in 0.75in; box-shadow:0 4px 20px rgba(0,0,0,.4); color:#111; font-size:12px; line-height:1.5;}
+  .doc h1{font-size:20px; letter-spacing:.02em;}
+  .doc .firm{font-size:13px;}
+  .doc .lbl{color:#555; font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; font-weight:700;}
+  .doc table{font-size:11.5px;}
+  .doc th{border-bottom:1.5px solid #333; color:#333; padding:6px 8px;}
+  .doc td{border-bottom:1px solid #ddd; padding:6px 8px;}
+  .doc .sec-title{background:#eef2f6; font-weight:700; text-transform:uppercase; letter-spacing:.04em; font-size:11px; padding:6px 8px; border-top:1.5px solid #333; border-bottom:1.5px solid #333;}
+  .doc .totrow td{border-bottom:none; padding:3px 8px;}
+  .doc .grand td{border-top:2px solid #333; font-weight:800; font-size:13px; padding-top:8px;}
+  .doc .nc{color:#7a4fb5; font-style:italic;}
+  .doc .note{font-size:10.5px; color:#444; background:#f7f8fa; border:1px solid #e2e6ea; border-radius:5px; padding:10px 12px; margin-top:14px;}
+  .doc .sig{margin-top:40px;}
+  .docbar{position:sticky; top:0; background:#2b2d30; padding:10px 16px; display:flex; gap:10px; align-items:center; margin:-24px -24px 24px; z-index:5;}
+  .docbar .btn{background:#3a7bd5;}
+  @media print{
+    body{background:#fff;}
+    #side,#main,.docbar,.noprint{display:none !important;}
+    #docwrap{display:block !important; background:#fff; padding:0;}
+    .doc{box-shadow:none; margin:0; max-width:none; padding:0.5in 0.6in; page-break-after:always;}
+    .doc:last-child{page-break-after:auto;}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="side">
+    <div class="brand"><b id="brandName">Legal Billing</b><span id="brandSub">&amp; Trust Manager</span></div>
+    <nav id="nav"></nav>
+  </aside>
+  <main id="main"></main>
+</div>
+
+<div id="docwrap"></div>
+<div id="modalHost"></div>
+
+<script>
+/* =========================================================================
+   Legal Billing & Trust Manager  —  single-file, local (localStorage) app
+   Built for Michigan legal practice: itemized fees, trust/IOLTA (MRPC 1.15),
+   reasonable-fee itemization (MRPC 1.5), tiered prompt-payment discounts.
+   ========================================================================= */
+
+/* ---------- storage ---------- */
+const LS_KEY = 'legalBilling.v1';
+const uid = (p='id') => p + '_' + Math.random().toString(36).slice(2,9) + Date.now().toString(36).slice(-4);
+
+let DB = load();
+
+function load(){
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(raw) return JSON.parse(raw);
+  }catch(e){ console.warn('load failed', e); }
+  return seed();
+}
+function save(){ localStorage.setItem(LS_KEY, JSON.stringify(DB)); }
+
+function seed(){
+  const clientId = uid('cl');
+  const matterId = uid('mt');
+  return {
+    firm:{
+      name:'Seyburn Law PLLC', line1:'', city:'', state:'MI', zip:'',
+      phone:'', email:'rangevine@seyburnlawpllc.com', barNo:'', ein:'',
+      trustBank:'', trustAcct:'', invoicePrefix:'INV-', nextInvoiceNo:1001,
+      retainerPrefix:'RET-', nextRetainerNo:1,
+      terms:'Payment due within 30 days of invoice date.',
+      trustNotice:'Advance fees and costs are deposited in the firm’s IOLTA client trust account and disbursed only as earned or incurred, in accordance with MRPC 1.15.'
+    },
+    timekeepers:[
+      {id:uid('tk'), name:'Attorney', initials:'ATT', rate:350, active:true}
+    ],
+    clients:[{
+      id:clientId, name:'Sample Client, Inc.', line1:'', city:'', state:'MI', zip:'',
+      email:'', phone:'', contact:'',
+      discount:{
+        type:'tiered',
+        appliesTo:'hourly',
+        note:'“Paid in full” means payment of 100% of any and all fees and out-of-pocket expenses advanced, whether current or past due.',
+        tiers:[
+          {id:uid('t'), label:'Early payment', percent:20, cond:'days', days:10},
+          {id:uid('t'), label:'Same-month payment', percent:10, cond:'eom', days:0}
+        ]
+      }
+    }],
+    matters:[{
+      id:matterId, clientId, name:'General Representation', number:'0001',
+      responsible:'', rate:350, status:'open',
+      description:''
+    }],
+    entries:[],        // {id,matterId,type:'hourly'|'fixed'|'expense',date,tkId,desc,hours,rate,amount,noCharge,ncNote,invoiceId|null}
+    invoices:[],       // see createInvoice
+    payments:[],       // {id,clientId,invoiceId|null,date,amount,method,note}
+    trust:[],          // {id,clientId,matterId|null,date,type:'deposit'|'apply'|'refund'|'adjust',amount,note,invoiceId|null}
+    retainers:[],      // {id,number,clientId,matterId,date,amount,purpose,status}
+    ui:{tab:'dashboard'}
+  };
+}
+
+/* ---------- helpers ---------- */
+const $ = (s,el=document)=>el.querySelector(s);
+const money = n => (n<0?'-$':'$') + Math.abs(Number(n)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+const num = n => (Number(n)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+const esc = s => String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const todayISO = () => new Date().toISOString().slice(0,10);
+function fmtDate(iso){ if(!iso) return ''; const [y,m,d]=iso.split('-'); return `${m}/${d}/${y}`; }
+function addDays(iso,n){ const d=new Date(iso+'T00:00:00'); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); }
+function endOfMonth(iso){ const d=new Date(iso+'T00:00:00'); const e=new Date(d.getFullYear(), d.getMonth()+1, 0); return e.toISOString().slice(0,10); }
+function clientById(id){ return DB.clients.find(c=>c.id===id); }
+function matterById(id){ return DB.matters.find(m=>m.id===id); }
+function mattersFor(clientId){ return DB.matters.filter(m=>m.clientId===clientId); }
+function tkById(id){ return DB.timekeepers.find(t=>t.id===id); }
+function tkLabel(id){ const t=tkById(id); return t?`${t.name} (${t.initials})`:'—'; }
+
+/* entry amount recompute */
+function entryAmount(e){
+  if(e.type==='hourly') return e.noCharge ? 0 : round2((Number(e.hours)||0)*(Number(e.rate)||0));
+  return round2(Number(e.amount)||0);
+}
+function round2(n){ return Math.round((Number(n)||0)*100)/100; }
+
+/* ---------- routing ---------- */
+const TABS = [
+  {id:'dashboard', label:'Dashboard', ic:'▚'},
+  {id:'clients', label:'Clients & Matters', ic:'▤'},
+  {id:'time', label:'Time & Fees', ic:'▦'},
+  {id:'invoices', label:'Invoices', ic:'▧'},
+  {id:'trust', label:'Retainers & Trust', ic:'▣'},
+  {id:'statements', label:'Statements', ic:'▥'},
+  {id:'settings', label:'Firm Settings', ic:'⚙'},
+];
+
+function render(){
+  $('#brandName').textContent = DB.firm.name || 'Legal Billing';
+  const nav = $('#nav');
+  nav.innerHTML = TABS.map(t=>`<a data-tab="${t.id}" class="${DB.ui.tab===t.id?'active':''}"><span class="ic">${t.ic}</span>${t.label}</a>`).join('');
+  nav.querySelectorAll('a').forEach(a=>a.onclick=()=>{ DB.ui.tab=a.dataset.tab; save(); render(); window.scrollTo(0,0); });
+  const main = $('#main');
+  hideDoc();
+  ({dashboard:viewDashboard, clients:viewClients, time:viewTime, invoices:viewInvoices,
+    trust:viewTrust, statements:viewStatements, settings:viewSettings}[DB.ui.tab]||viewDashboard)(main);
+}
+
+/* =========================================================================
+   DASHBOARD
+   ========================================================================= */
+function viewDashboard(main){
+  const openInv = DB.invoices.filter(i=>i.status!=='paid'&&i.status!=='void');
+  const arTotal = openInv.reduce((s,i)=>s+invoiceBalance(i),0);
+  const trustTotal = DB.clients.reduce((s,c)=>s+trustBalance(c.id),0);
+  const wipHourly = unbilledEntries().filter(e=>e.type==='hourly').reduce((s,e)=>s+entryAmount(e),0);
+  const wipOther = unbilledEntries().filter(e=>e.type!=='hourly').reduce((s,e)=>s+entryAmount(e),0);
+
+  main.innerHTML = `
+    <div class="topbar"><div><h1>Dashboard</h1><div class="sub">${esc(DB.firm.name)} · ${fmtDate(todayISO())}</div></div></div>
+    <div class="grid g4" style="margin-bottom:18px">
+      <div class="stat"><div class="k">Accounts Receivable</div><div class="v">${money(arTotal)}</div><div class="small muted">${openInv.length} open invoice(s)</div></div>
+      <div class="stat"><div class="k">Client Trust (IOLTA)</div><div class="v">${money(trustTotal)}</div><div class="small muted">across ${DB.clients.length} client(s)</div></div>
+      <div class="stat"><div class="k">Unbilled Fees (WIP)</div><div class="v">${money(wipHourly)}</div><div class="small muted">hourly work in progress</div></div>
+      <div class="stat"><div class="k">Unbilled Fixed/Costs</div><div class="v">${money(wipOther)}</div><div class="small muted">ready to invoice</div></div>
+    </div>
+
+    <div class="grid g2">
+      <div class="card">
+        <h3>Open Invoices <span class="r"><button class="btn sm" data-go="invoices">View all</button></span></h3>
+        ${openInv.length? `<table><thead><tr><th>Invoice</th><th>Client</th><th class="num">Balance</th><th>Status</th></tr></thead><tbody>`+
+          openInv.slice(0,8).map(i=>`<tr style="cursor:pointer" data-openinv="${i.id}"><td><b>${esc(i.number)}</b><br><span class="small muted">${fmtDate(i.date)}</span></td>
+            <td>${esc(clientById(i.clientId)?.name||'—')}</td><td class="num">${money(invoiceBalance(i))}</td><td>${invStatusTag(i)}</td></tr>`).join('')+
+          `</tbody></table>` : `<div class="empty">No open invoices.</div>`}
+      </div>
+      <div class="card">
+        <h3>Trust Balances</h3>
+        ${DB.clients.length? `<table><thead><tr><th>Client</th><th class="num">Trust Balance</th></tr></thead><tbody>`+
+          DB.clients.map(c=>`<tr><td>${esc(c.name)}</td><td class="num ${trustBalance(c.id)<0?'':''}">${money(trustBalance(c.id))}</td></tr>`).join('')+
+          `</tbody></table>` : `<div class="empty">No clients yet.</div>`}
+        <div class="note small muted" style="margin-top:10px">${esc(DB.firm.trustNotice)}</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Quick actions</h3>
+      <div class="pill-row">
+        <button class="btn" data-go="time">＋ Add time / fee entry</button>
+        <button class="btn sec" data-go="invoices" id="qNewInv">＋ New invoice</button>
+        <button class="btn sec" data-go="trust" id="qRetainer">＋ Retainer request</button>
+        <button class="btn sec" data-go="clients">＋ New client / matter</button>
+      </div>
+    </div>`;
+  main.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{ DB.ui.tab=b.dataset.go; save(); render(); });
+  main.querySelectorAll('[data-openinv]').forEach(t=>t.onclick=()=>{ openInvoiceDoc(t.dataset.openinv); });
+}
+
+/* =========================================================================
+   CLIENTS & MATTERS
+   ========================================================================= */
+function viewClients(main){
+  main.innerHTML = `
+    <div class="topbar"><div><h1>Clients &amp; Matters</h1><div class="sub">Client billing profiles, matters, and discount rules</div></div>
+      <button class="btn" id="newClient">＋ New Client</button></div>
+    <div id="clientList"></div>`;
+  $('#newClient').onclick=()=>editClient();
+  const list = $('#clientList');
+  if(!DB.clients.length){ list.innerHTML=`<div class="card"><div class="empty">No clients yet. Create your first client to begin.</div></div>`; return; }
+  list.innerHTML = DB.clients.map(c=>{
+    const ms = mattersFor(c.id);
+    return `<div class="card">
+      <h3>${esc(c.name)}
+        <span class="r">
+          <button class="btn sm sec" data-editcl="${c.id}">Edit</button>
+          <button class="btn sm sec" data-addmt="${c.id}">＋ Matter</button>
+        </span></h3>
+      <div class="small muted" style="margin-bottom:6px">
+        ${[c.line1, [c.city,c.state,c.zip].filter(Boolean).join(', ')].filter(Boolean).join(' · ')||'No address'}
+        ${c.email?' · '+esc(c.email):''} ${c.phone?' · '+esc(c.phone):''}
+      </div>
+      <div style="margin:8px 0">${discountSummary(c)}</div>
+      ${ms.length? `<table><thead><tr><th>Matter</th><th>No.</th><th class="num">Rate</th><th>Status</th><th class="num">Unbilled</th><th></th></tr></thead><tbody>`+
+        ms.map(m=>{
+          const wip = unbilledEntries().filter(e=>e.matterId===m.id).reduce((s,e)=>s+entryAmount(e),0);
+          return `<tr><td><b>${esc(m.name)}</b>${m.description?`<br><span class="small muted">${esc(m.description)}</span>`:''}</td>
+            <td class="small">${esc(m.number||'—')}</td><td class="num">${money(m.rate)}</td>
+            <td>${m.status==='open'?'<span class="tag good">Open</span>':'<span class="tag gray">Closed</span>'}</td>
+            <td class="num">${money(wip)}</td>
+            <td class="right"><button class="btn ghost sm" data-editmt="${m.id}">Edit</button></td></tr>`;
+        }).join('')+`</tbody></table>` : `<div class="empty small">No matters yet.</div>`}
+    </div>`;
+  }).join('');
+  list.querySelectorAll('[data-editcl]').forEach(b=>b.onclick=()=>editClient(clientById(b.dataset.editcl)));
+  list.querySelectorAll('[data-addmt]').forEach(b=>b.onclick=()=>editMatter(null,b.dataset.addmt));
+  list.querySelectorAll('[data-editmt]').forEach(b=>b.onclick=()=>editMatter(matterById(b.dataset.editmt)));
+}
+
+function discountSummary(c){
+  const d=c.discount||{type:'none'};
+  if(d.type==='none') return `<span class="tag gray">No discount</span>`;
+  if(d.type==='flat') return `<span class="tag info">Flat ${d.tiers?.[0]?.percent||0}% off ${d.appliesTo==='all'?'all fees':'hourly fees'}</span>`;
+  const tiers=(d.tiers||[]).map(t=>`<span class="tag info">${t.percent}% – ${condLabel(t)}</span>`).join(' ');
+  return `<span class="small muted">Tiered discount on ${d.appliesTo==='all'?'all fees':'hourly fees'}: </span>${tiers}`;
+}
+function condLabel(t){
+  if(t.cond==='days') return `if paid in full within ${t.days} day(s) of invoice`;
+  if(t.cond==='eom') return `if paid in full by end of invoice month`;
+  if(t.cond==='date') return `if paid in full by ${fmtDate(t.byDate)}`;
+  return 'always';
+}
+
+function editClient(c){
+  const isNew=!c;
+  c = c ? JSON.parse(JSON.stringify(c)) : {id:uid('cl'), name:'', line1:'', city:'', state:'MI', zip:'', email:'', phone:'', contact:'',
+        discount:{type:'none', appliesTo:'hourly', note:'', tiers:[]}};
+  if(!c.discount) c.discount={type:'none',appliesTo:'hourly',note:'',tiers:[]};
+  openModal(isNew?'New Client':'Edit Client', body=>{
+    body.innerHTML = `
+      <div class="grid g2">
+        <div><label>Client name *</label><input id="c_name" value="${esc(c.name)}"></div>
+        <div><label>Contact person</label><input id="c_contact" value="${esc(c.contact)}"></div>
+        <div><label>Address line</label><input id="c_line1" value="${esc(c.line1)}"></div>
+        <div class="grid g3" style="gap:8px">
+          <div><label>City</label><input id="c_city" value="${esc(c.city)}"></div>
+          <div><label>State</label><input id="c_state" value="${esc(c.state)}"></div>
+          <div><label>ZIP</label><input id="c_zip" value="${esc(c.zip)}"></div>
+        </div>
+        <div><label>Email</label><input id="c_email" value="${esc(c.email)}"></div>
+        <div><label>Phone</label><input id="c_phone" value="${esc(c.phone)}"></div>
+      </div>
+      <fieldset class="fieldset" style="margin-top:16px">
+        <legend>Discount rules</legend>
+        <div class="grid g2">
+          <div><label>Discount type</label>
+            <select id="d_type">
+              <option value="none">None</option>
+              <option value="flat">Flat (single %)</option>
+              <option value="tiered">Tiered (prompt-payment)</option>
+            </select></div>
+          <div><label>Applies to</label>
+            <select id="d_applies">
+              <option value="hourly">Hourly fees only</option>
+              <option value="all">All fees (hourly + fixed)</option>
+            </select></div>
+        </div>
+        <div id="tiersWrap" style="margin-top:10px"></div>
+        <div><label>“Paid in full” / discount note (prints on invoice)</label>
+          <textarea id="d_note">${esc(c.discount.note||'')}</textarea></div>
+      </fieldset>`;
+    $('#d_type',body).value=c.discount.type; $('#d_applies',body).value=c.discount.appliesTo;
+    function renderTiers(){
+      const type=$('#d_type',body).value;
+      const wrap=$('#tiersWrap',body);
+      if(type==='none'){ wrap.innerHTML=`<div class="small muted">This client receives no discount.</div>`; return; }
+      if(type==='flat'){
+        if(!c.discount.tiers[0]) c.discount.tiers[0]={id:uid('t'),label:'Discount',percent:10,cond:'always',days:0};
+        c.discount.tiers = [c.discount.tiers[0]];
+        wrap.innerHTML=`<div class="row"><div style="max-width:160px"><label>Percent off</label>
+          <input type="number" id="flat_pct" value="${c.discount.tiers[0].percent}" min="0" max="100" step="0.5"></div>
+          <div class="small muted">Applied to every invoice automatically.</div></div>`;
+        $('#flat_pct',body).oninput=e=>c.discount.tiers[0].percent=Number(e.target.value)||0;
+        return;
+      }
+      // tiered
+      wrap.innerHTML = `<div id="tierList"></div>
+        <button class="btn sec sm" id="addTier" type="button">＋ Add tier</button>`;
+      drawTierList();
+      $('#addTier',body).onclick=()=>{ c.discount.tiers.push({id:uid('t'),label:'',percent:10,cond:'days',days:10}); drawTierList(); };
+      function drawTierList(){
+        const tl=$('#tierList',body);
+        tl.innerHTML = c.discount.tiers.map((t,i)=>`
+          <div class="tier-row" data-i="${i}">
+            <input placeholder="Label (e.g. Early payment)" class="t_label" value="${esc(t.label)}">
+            <input type="number" class="t_pct" value="${t.percent}" min="0" max="100" step="0.5" title="Percent">
+            <select class="t_cond">
+              <option value="days"${t.cond==='days'?' selected':''}>within N days of invoice</option>
+              <option value="eom"${t.cond==='eom'?' selected':''}>by end of invoice month</option>
+            </select>
+            <input type="number" class="t_days" value="${t.days||0}" min="0" step="1" title="Days" style="${t.cond==='days'?'':'visibility:hidden'}">
+            <button class="btn ghost sm t_del" type="button" title="Remove">✕</button>
+          </div>`).join('') || `<div class="small muted">No tiers.</div>`;
+        tl.querySelectorAll('.tier-row').forEach(r=>{
+          const i=+r.dataset.i, t=c.discount.tiers[i];
+          r.querySelector('.t_label').oninput=e=>t.label=e.target.value;
+          r.querySelector('.t_pct').oninput=e=>t.percent=Number(e.target.value)||0;
+          r.querySelector('.t_days').oninput=e=>t.days=Number(e.target.value)||0;
+          r.querySelector('.t_cond').onchange=e=>{ t.cond=e.target.value; drawTierList(); };
+          r.querySelector('.t_del').onclick=()=>{ c.discount.tiers.splice(i,1); drawTierList(); };
+        });
+      }
+    }
+    renderTiers();
+    $('#d_type',body).onchange=renderTiers;
+  }, ()=>{
+    const g=id=>$('#'+id).value.trim();
+    c.name=g('c_name'); if(!c.name){ alert('Client name is required.'); return false; }
+    c.contact=g('c_contact'); c.line1=g('c_line1'); c.city=g('c_city'); c.state=g('c_state'); c.zip=g('c_zip');
+    c.email=g('c_email'); c.phone=g('c_phone');
+    c.discount.type=$('#d_type').value; c.discount.appliesTo=$('#d_applies').value; c.discount.note=$('#d_note').value;
+    if(c.discount.type==='none') c.discount.tiers=[];
+    const ex=DB.clients.find(x=>x.id===c.id);
+    if(ex) Object.assign(ex,c); else DB.clients.push(c);
+    save(); render(); return true;
+  });
+}
+
+function editMatter(m, clientId){
+  const isNew=!m;
+  m = m ? {...m} : {id:uid('mt'), clientId, name:'', number:'', responsible:'', rate:(clientDefaultRate(clientId)), status:'open', description:''};
+  openModal(isNew?'New Matter':'Edit Matter', body=>{
+    body.innerHTML=`
+      <div class="grid g2">
+        <div><label>Client</label><select id="m_client">${DB.clients.map(c=>`<option value="${c.id}"${c.id===m.clientId?' selected':''}>${esc(c.name)}</option>`).join('')}</select></div>
+        <div><label>Matter / file number</label><input id="m_number" value="${esc(m.number)}"></div>
+        <div style="grid-column:1/-1"><label>Matter name *</label><input id="m_name" value="${esc(m.name)}"></div>
+        <div><label>Default hourly rate</label><input type="number" id="m_rate" value="${m.rate}" step="5"></div>
+        <div><label>Responsible attorney</label><input id="m_resp" value="${esc(m.responsible)}"></div>
+        <div><label>Status</label><select id="m_status"><option value="open"${m.status==='open'?' selected':''}>Open</option><option value="closed"${m.status==='closed'?' selected':''}>Closed</option></select></div>
+        <div style="grid-column:1/-1"><label>Description (optional)</label><textarea id="m_desc">${esc(m.description)}</textarea></div>
+      </div>`;
+  }, ()=>{
+    m.clientId=$('#m_client').value; m.number=$('#m_number').value.trim(); m.name=$('#m_name').value.trim();
+    if(!m.name){ alert('Matter name required.'); return false; }
+    m.rate=Number($('#m_rate').value)||0; m.responsible=$('#m_resp').value.trim();
+    m.status=$('#m_status').value; m.description=$('#m_desc').value.trim();
+    const ex=DB.matters.find(x=>x.id===m.id);
+    if(ex) Object.assign(ex,m); else DB.matters.push(m);
+    save(); render(); return true;
+  }, isNew?null:{delete:()=>{
+    if(DB.entries.some(e=>e.matterId===m.id)){ alert('Cannot delete: this matter has time/fee entries.'); return; }
+    if(confirm('Delete this matter?')){ DB.matters=DB.matters.filter(x=>x.id!==m.id); save(); render(); closeModal(); }
+  }});
+}
+function clientDefaultRate(clientId){
+  const ms=mattersFor(clientId); if(ms[0]) return ms[0].rate;
+  return DB.timekeepers[0]?.rate||350;
+}
+
+/* =========================================================================
+   TIME & FEES
+   ========================================================================= */
+function viewTime(main){
+  const f = viewTime._f || (viewTime._f={clientId:'', matterId:'', type:'all', unbilled:true});
+  main.innerHTML=`
+    <div class="topbar"><div><h1>Time &amp; Fees</h1><div class="sub">Hourly time, fixed fees, and out-of-pocket expenses</div></div>
+      <div class="pill-row">
+        <button class="btn" data-add="hourly">＋ Hourly time</button>
+        <button class="btn sec" data-add="fixed">＋ Fixed fee</button>
+        <button class="btn sec" data-add="expense">＋ Expense</button>
+      </div></div>
+    <div class="card">
+      <div class="row" style="margin-bottom:12px">
+        <div style="min-width:200px"><label>Client</label><select id="f_client"><option value="">All clients</option>${DB.clients.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></div>
+        <div style="min-width:200px"><label>Matter</label><select id="f_matter"><option value="">All matters</option></select></div>
+        <div style="min-width:140px"><label>Type</label><select id="f_type"><option value="all">All types</option><option value="hourly">Hourly</option><option value="fixed">Fixed fee</option><option value="expense">Expense</option></select></div>
+        <div><label>&nbsp;</label><label class="chk"><input type="checkbox" id="f_unbilled"> Unbilled only</label></div>
+      </div>
+      <div id="entryTable"></div>
+    </div>`;
+  const cS=$('#f_client'), mS=$('#f_matter'), tS=$('#f_type'), uC=$('#f_unbilled');
+  cS.value=f.clientId; tS.value=f.type; uC.checked=f.unbilled;
+  function fillMatters(){
+    mS.innerHTML=`<option value="">All matters</option>`+ (f.clientId?mattersFor(f.clientId):DB.matters)
+      .map(m=>`<option value="${m.id}">${esc((clientById(m.clientId)?.name||'')+' — '+m.name)}</option>`).join('');
+    mS.value=f.matterId||'';
+  }
+  fillMatters();
+  cS.onchange=()=>{ f.clientId=cS.value; f.matterId=''; fillMatters(); drawEntries(); };
+  mS.onchange=()=>{ f.matterId=mS.value; drawEntries(); };
+  tS.onchange=()=>{ f.type=tS.value; drawEntries(); };
+  uC.onchange=()=>{ f.unbilled=uC.checked; drawEntries(); };
+  main.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>editEntry(null,b.dataset.add,f.matterId));
+  drawEntries();
+
+  function drawEntries(){
+    let list = DB.entries.slice();
+    if(f.clientId) list=list.filter(e=>matterById(e.matterId)?.clientId===f.clientId);
+    if(f.matterId) list=list.filter(e=>e.matterId===f.matterId);
+    if(f.type!=='all') list=list.filter(e=>e.type===f.type);
+    if(f.unbilled) list=list.filter(e=>!e.invoiceId);
+    list.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+    const tbl=$('#entryTable');
+    if(!list.length){ tbl.innerHTML=`<div class="empty">No entries match.</div>`; return; }
+    const total=list.reduce((s,e)=>s+entryAmount(e),0);
+    tbl.innerHTML=`<table><thead><tr>
+      <th>Date</th><th>Matter</th><th>Type</th><th>Description</th><th class="num">Hrs</th><th class="num">Rate</th><th class="num">Amount</th><th>Status</th><th></th>
+      </tr></thead><tbody>`+
+      list.map(e=>{
+        const m=matterById(e.matterId), c=clientById(m?.clientId);
+        return `<tr>
+          <td class="nowrap">${fmtDate(e.date)}</td>
+          <td class="small">${esc(c?.name||'')}<br>${esc(m?.name||'')}</td>
+          <td>${typeTag(e.type)}</td>
+          <td>${esc(e.desc)} ${e.noCharge?`<div><span class="tag nc">No Charge</span> <span class="small muted">${esc(e.ncNote||'')}</span></div>`:''}</td>
+          <td class="num">${e.type==='hourly'?num(e.hours):''}</td>
+          <td class="num">${e.type==='hourly'?money(e.rate):''}</td>
+          <td class="num">${e.noCharge?'<span class="muted">$0.00</span>':money(entryAmount(e))}</td>
+          <td>${e.invoiceId?`<span class="tag gray">Billed</span>`:`<span class="tag good">Unbilled</span>`}</td>
+          <td class="right">${e.invoiceId?'':`<button class="btn ghost sm" data-edit="${e.id}">Edit</button>`}</td>
+        </tr>`;
+      }).join('')+
+      `</tbody><tfoot><tr><td colspan="6" class="right"><b>Total (charged):</b></td><td class="num"><b>${money(total)}</b></td><td colspan="2"></td></tr></tfoot></table>`;
+    tbl.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>editEntry(DB.entries.find(x=>x.id===b.dataset.edit)));
+  }
+}
+function typeTag(t){ return t==='hourly'?'<span class="tag info">Hourly</span>':t==='fixed'?'<span class="tag warn">Fixed</span>':'<span class="tag gray">Expense</span>'; }
+
+function editEntry(e, type, presetMatter){
+  const isNew=!e;
+  type = e?e.type:type;
+  e = e ? {...e} : {id:uid('en'), matterId:presetMatter||'', type, date:todayISO(), tkId:DB.timekeepers[0]?.id||'',
+        desc:'', hours:0, rate:0, amount:0, noCharge:false, ncNote:'No charge as a professional courtesy.', invoiceId:null};
+  openModal(isNew?('New '+(type==='hourly'?'Hourly Entry':type==='fixed'?'Fixed Fee':'Expense')):'Edit Entry', body=>{
+    body.innerHTML=`
+      <div class="grid g2">
+        <div><label>Client &amp; Matter *</label><select id="e_matter">
+          <option value="">— select —</option>
+          ${DB.matters.map(m=>`<option value="${m.id}"${m.id===e.matterId?' selected':''}>${esc((clientById(m.clientId)?.name||'')+' — '+m.name)}</option>`).join('')}
+        </select></div>
+        <div><label>Date</label><input type="date" id="e_date" value="${e.date}"></div>
+        ${type==='hourly'?`
+        <div><label>Timekeeper</label><select id="e_tk">${DB.timekeepers.map(t=>`<option value="${t.id}"${t.id===e.tkId?' selected':''}>${esc(t.name+' ('+t.initials+')')}</option>`).join('')}</select></div>
+        <div class="grid g2" style="gap:8px">
+          <div><label>Hours</label><input type="number" id="e_hours" value="${e.hours}" step="0.1" min="0"></div>
+          <div><label>Rate ($/hr)</label><input type="number" id="e_rate" value="${e.rate}" step="5" min="0"></div>
+        </div>`:`
+        <div><label>Amount ($)</label><input type="number" id="e_amount" value="${e.amount}" step="0.01" min="0"></div>`}
+        <div style="grid-column:1/-1"><label>Description of services / expense *</label><textarea id="e_desc">${esc(e.desc)}</textarea></div>
+      </div>
+      ${type==='hourly'?`
+      <fieldset class="fieldset" style="margin-top:12px">
+        <legend>No-charge</legend>
+        <label class="chk"><input type="checkbox" id="e_nc" ${e.noCharge?'checked':''}> Mark as <b style="margin:0 3px">No Charge</b> (shown on invoice, excluded from total)</label>
+        <div id="ncNoteWrap" style="margin-top:8px;${e.noCharge?'':'display:none'}">
+          <label>No-charge note (customizable)</label>
+          <input id="e_ncnote" value="${esc(e.ncNote||'')}">
+        </div>
+      </fieldset>
+      <div class="note small muted" style="background:var(--accent-soft);border-color:var(--accent-soft);margin-top:10px">
+        Amount preview: <b id="amtPrev"></b></div>`:''}`;
+    if(type==='hourly'){
+      const nc=$('#e_nc',body), noteWrap=$('#ncNoteWrap',body);
+      nc.onchange=()=>{ noteWrap.style.display=nc.checked?'':'none'; upd(); };
+      const upd=()=>{ const h=Number($('#e_hours',body).value)||0, r=Number($('#e_rate',body).value)||0;
+        $('#amtPrev',body).textContent = nc.checked?'$0.00 (No Charge)':money(h*r); };
+      $('#e_hours',body).oninput=upd; $('#e_rate',body).oninput=upd;
+      // auto-fill rate from matter
+      $('#e_matter',body).onchange=ev=>{ const m=matterById(ev.target.value); if(m && !Number($('#e_rate',body).value)) $('#e_rate',body).value=m.rate; upd(); };
+      upd();
+    }
+  }, ()=>{
+    e.matterId=$('#e_matter').value; if(!e.matterId){ alert('Select a matter.'); return false; }
+    e.date=$('#e_date').value; e.desc=$('#e_desc').value.trim();
+    if(!e.desc){ alert('Description is required (MRPC 1.5 — services must be itemized).'); return false; }
+    if(type==='hourly'){
+      e.tkId=$('#e_tk').value; e.hours=Number($('#e_hours').value)||0; e.rate=Number($('#e_rate').value)||0;
+      e.noCharge=$('#e_nc').checked; e.ncNote=$('#e_ncnote')?.value||'';
+    }else{ e.amount=Number($('#e_amount').value)||0; }
+    const ex=DB.entries.find(x=>x.id===e.id);
+    if(ex) Object.assign(ex,e); else DB.entries.push(e);
+    save(); render(); return true;
+  }, isNew?null:{delete:()=>{ if(confirm('Delete this entry?')){ DB.entries=DB.entries.filter(x=>x.id!==e.id); save(); render(); closeModal(); } }});
+}
+
+function unbilledEntries(){ return DB.entries.filter(e=>!e.invoiceId); }
+
+/* =========================================================================
+   INVOICES
+   ========================================================================= */
+function viewInvoices(main){
+  main.innerHTML=`
+    <div class="topbar"><div><h1>Invoices</h1><div class="sub">Itemized invoices with hourly fees, fixed fees, and expenses</div></div>
+      <button class="btn" id="newInv">＋ New Invoice</button></div>
+    <div class="card"><div id="invTable"></div></div>`;
+  $('#newInv').onclick=()=>newInvoiceFlow();
+  const t=$('#invTable');
+  if(!DB.invoices.length){ t.innerHTML=`<div class="empty">No invoices yet.</div>`; return; }
+  const inv=DB.invoices.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  t.innerHTML=`<table><thead><tr><th>Invoice</th><th>Client / Matter</th><th>Date</th><th class="num">Total</th><th class="num">Paid</th><th class="num">Balance</th><th>Status</th><th></th></tr></thead><tbody>`+
+    inv.map(i=>{
+      const c=clientById(i.clientId);
+      return `<tr>
+        <td><b>${esc(i.number)}</b></td>
+        <td>${esc(c?.name||'—')}<br><span class="small muted">${esc(i.matterNames||'')}</span></td>
+        <td class="nowrap">${fmtDate(i.date)}</td>
+        <td class="num">${money(i.grandTotal)}</td>
+        <td class="num">${money(invoicePaid(i))}</td>
+        <td class="num">${money(invoiceBalance(i))}</td>
+        <td>${invStatusTag(i)}</td>
+        <td class="right nowrap">
+          <button class="btn ghost sm" data-view="${i.id}">Open</button>
+          <button class="btn ghost sm" data-pay="${i.id}">Payment</button>
+        </td></tr>`;
+    }).join('')+`</tbody></table>`;
+  t.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>openInvoiceDoc(b.dataset.view));
+  t.querySelectorAll('[data-pay]').forEach(b=>b.onclick=()=>recordPayment(b.dataset.pay));
+}
+function invStatusTag(i){
+  if(i.status==='void') return '<span class="tag gray">Void</span>';
+  const bal=invoiceBalance(i);
+  if(bal<=0.005) return '<span class="tag good">Paid</span>';
+  if(invoicePaid(i)>0) return '<span class="tag warn">Partial</span>';
+  return '<span class="tag bad">Open</span>';
+}
+function invoicePaid(i){ return round2(DB.payments.filter(p=>p.invoiceId===i.id).reduce((s,p)=>s+p.amount,0)
+  + DB.trust.filter(t=>t.invoiceId===i.id&&t.type==='apply').reduce((s,t)=>s+t.amount,0)); }
+function invoiceBalance(i){ return round2((i.grandTotal||0) - invoicePaid(i)); }
+
+/* ---- New-invoice flow: pick client + matters, select unbilled entries ---- */
+function newInvoiceFlow(){
+  if(!DB.clients.length){ alert('Create a client first.'); return; }
+  let sel = {clientId:DB.clients[0].id, matterIds:new Set(), entryIds:new Set(), date:todayISO()};
+  openModal('New Invoice — select work', body=>{
+    body.innerHTML=`
+      <div class="grid g2">
+        <div><label>Client *</label><select id="i_client">${DB.clients.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></div>
+        <div><label>Invoice date</label><input type="date" id="i_date" value="${sel.date}"></div>
+      </div>
+      <div class="subhead">Matters to include</div>
+      <div id="matterPick"></div>
+      <div class="subhead">Unbilled entries</div>
+      <div class="small muted" style="margin-bottom:6px">Only unbilled entries for the selected matter(s) are shown. No-charge items may be included; they print but don’t add to the total.</div>
+      <div id="entryPick"></div>`;
+    const cS=$('#i_client',body); cS.value=sel.clientId;
+    cS.onchange=()=>{ sel.clientId=cS.value; sel.matterIds=new Set(); sel.entryIds=new Set(); drawMatters(); drawEntries(); };
+    $('#i_date',body).onchange=e=>sel.date=e.target.value;
+    function drawMatters(){
+      const ms=mattersFor(sel.clientId);
+      const w=$('#matterPick',body);
+      if(!ms.length){ w.innerHTML=`<div class="small muted">This client has no matters.</div>`; return; }
+      w.innerHTML=ms.map(m=>{
+        const wip=unbilledEntries().filter(e=>e.matterId===m.id).length;
+        return `<label class="chk" style="margin:4px 0"><input type="checkbox" class="mck" value="${m.id}" ${sel.matterIds.has(m.id)?'checked':''}>
+          ${esc(m.name)} <span class="small muted">(${wip} unbilled)</span></label>`;
+      }).join('');
+      w.querySelectorAll('.mck').forEach(ck=>ck.onchange=()=>{ ck.checked?sel.matterIds.add(ck.value):sel.matterIds.delete(ck.value); drawEntries(); });
+    }
+    function drawEntries(){
+      const w=$('#entryPick',body);
+      const mids=[...sel.matterIds];
+      if(!mids.length){ w.innerHTML=`<div class="small muted">Select at least one matter.</div>`; return; }
+      const list=unbilledEntries().filter(e=>mids.includes(e.matterId)).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+      if(!list.length){ w.innerHTML=`<div class="small muted">No unbilled entries for the selected matter(s).</div>`; return; }
+      // default select all
+      list.forEach(e=>{ if(!sel._touched) sel.entryIds.add(e.id); });
+      sel._touched=true;
+      w.innerHTML=`<table><thead><tr><th><input type="checkbox" id="ckAll"></th><th>Date</th><th>Type</th><th>Description</th><th class="num">Amount</th></tr></thead><tbody>`+
+        list.map(e=>`<tr><td><input type="checkbox" class="eck" value="${e.id}" ${sel.entryIds.has(e.id)?'checked':''}></td>
+          <td class="nowrap">${fmtDate(e.date)}</td><td>${typeTag(e.type)}</td>
+          <td>${esc(e.desc)} ${e.noCharge?'<span class="tag nc">No Charge</span>':''}</td>
+          <td class="num">${e.noCharge?'$0.00':money(entryAmount(e))}</td></tr>`).join('')+`</tbody></table>`;
+      w.querySelectorAll('.eck').forEach(ck=>ck.onchange=()=>{ ck.checked?sel.entryIds.add(ck.value):sel.entryIds.delete(ck.value); });
+      $('#ckAll',body).onchange=e=>{ w.querySelectorAll('.eck').forEach(ck=>{ ck.checked=e.target.checked; ck.checked?sel.entryIds.add(ck.value):sel.entryIds.delete(ck.value); }); };
+    }
+    drawMatters(); drawEntries();
+  }, ()=>{
+    if(!sel.entryIds.size){ alert('Select at least one entry.'); return false; }
+    createInvoice(sel);
+    return true;
+  }, null, 'Create Invoice');
+}
+
+function createInvoice(sel){
+  const client=clientById(sel.clientId);
+  const entryIds=[...sel.entryIds];
+  const mids=[...new Set(entryIds.map(id=>DB.entries.find(e=>e.id===id).matterId))];
+  const number = DB.firm.invoicePrefix + (DB.firm.nextInvoiceNo++);
+  const inv={
+    id:uid('inv'), number, clientId:sel.clientId, matterIds:mids,
+    matterNames:mids.map(id=>matterById(id)?.name).filter(Boolean).join(', '),
+    date:sel.date, dueDate:addDays(sel.date,30),
+    entryIds,
+    discountSnapshot: JSON.parse(JSON.stringify(client.discount||{type:'none'})),
+    discountOverride:{mode:'auto', tierId:'', customPct:0, keepAvailable:false}, // auto | none | tier | custom
+    priorBalance:0,
+    status:'open', createdAt:todayISO()
+  };
+  computeInvoiceTotals(inv);
+  DB.invoices.push(inv);
+  entryIds.forEach(id=>{ const e=DB.entries.find(x=>x.id===id); if(e) e.invoiceId=inv.id; });
+  save();
+  openInvoiceDoc(inv.id);
+}
+
+/* compute stored totals for list views (uses selected/effective discount) */
+function computeInvoiceTotals(inv){
+  const b=invoiceBreakdown(inv);
+  inv.hourlyCharged=b.hourlyCharged; inv.fixedTotal=b.fixedTotal; inv.expenseTotal=b.expenseTotal;
+  inv.discountAmount=b.discountApplied; inv.grandTotal=b.grandTotal;
+}
+
+/* full breakdown incl. discount options */
+function invoiceBreakdown(inv){
+  const entries = inv.entryIds.map(id=>DB.entries.find(e=>e.id===id)).filter(Boolean);
+  const hourly = entries.filter(e=>e.type==='hourly');
+  const fixed  = entries.filter(e=>e.type==='fixed');
+  const expense= entries.filter(e=>e.type==='expense');
+  const hourlyCharged = round2(hourly.filter(e=>!e.noCharge).reduce((s,e)=>s+entryAmount(e),0));
+  const fixedTotal = round2(fixed.reduce((s,e)=>s+entryAmount(e),0));
+  const expenseTotal = round2(expense.reduce((s,e)=>s+entryAmount(e),0));
+
+  const d=inv.discountSnapshot||{type:'none'};
+  const base = (d.appliesTo==='all') ? (hourlyCharged+fixedTotal) : hourlyCharged;
+
+  // Build available discount options (tiers) with deadlines
+  let options=[];
+  if(d.type==='flat' && d.tiers?.[0]){
+    options.push({id:d.tiers[0].id, label:d.tiers[0].label||'Discount', percent:d.tiers[0].percent, deadline:null, condText:'Applied to this invoice'});
+  }else if(d.type==='tiered'){
+    options = (d.tiers||[]).map(t=>{
+      let deadline=null, condText='';
+      if(t.cond==='days'){ deadline=addDays(inv.date, t.days||0); condText=`if paid in full within ${t.days} day(s) — by ${fmtDate(deadline)}`; }
+      else if(t.cond==='eom'){ deadline=endOfMonth(inv.date); condText=`if paid in full by end of invoice month — by ${fmtDate(deadline)}`; }
+      return {id:t.id, label:t.label||'Discount', percent:t.percent, deadline, condText};
+    });
+  }
+  options.forEach(o=>o.amount=round2(base*o.percent/100));
+
+  // Determine effective discount from override
+  const ov=inv.discountOverride||{mode:'auto'};
+  let effPercent=0, effLabel='', effAmount=0, effId='';
+  if(ov.mode==='custom'){ effPercent=Number(ov.customPct)||0; effLabel='Discount (manual override)'; effId='custom'; }
+  else if(ov.mode==='none'){ effPercent=0; }
+  else if(ov.mode==='tier'){ const o=options.find(x=>x.id===ov.tierId); if(o){ effPercent=o.percent; effLabel=o.label; effId=o.id; } }
+  else { // auto = best tier still available as of today (unless keepAvailable overrides expiry)
+    const today=todayISO();
+    const avail = options.filter(o=>!o.deadline || o.deadline>=today || ov.keepAvailable);
+    if(avail.length){ const best=avail.reduce((a,b)=>b.percent>a.percent?b:a); effPercent=best.percent; effLabel=best.label; effId=best.id; }
+  }
+  effAmount = round2(base*effPercent/100);
+
+  const grandTotal = round2(hourlyCharged - (d.appliesTo==='all'?0:effAmount) + fixedTotal - (d.appliesTo==='all'?effAmount:0) + expenseTotal + (inv.priorBalance||0));
+  // simpler: subtotal minus discount
+  const subtotal = round2(hourlyCharged + fixedTotal + expenseTotal);
+  const grand = round2(subtotal - effAmount + (inv.priorBalance||0));
+
+  return {entries, hourly, fixed, expense, hourlyCharged, fixedTotal, expenseTotal,
+    subtotal, options, base, discountApplied:effAmount, discountPercent:effPercent,
+    discountLabel:effLabel, discountId:effId, grandTotal:grand};
+}
+
+/* ---- payments ---- */
+function recordPayment(invId){
+  const inv=DB.invoices.find(i=>i.id===invId);
+  const bal=invoiceBalance(inv);
+  let p={id:uid('pay'), clientId:inv.clientId, invoiceId:inv.id, date:todayISO(), amount:bal, method:'Check', note:''};
+  openModal('Record Payment — '+inv.number, body=>{
+    body.innerHTML=`
+      <div class="grid g2">
+        <div><label>Date</label><input type="date" id="p_date" value="${p.date}"></div>
+        <div><label>Amount</label><input type="number" id="p_amt" value="${p.amount}" step="0.01"></div>
+        <div><label>Method</label><select id="p_method"><option>Check</option><option>ACH / Wire</option><option>Credit Card</option><option>Cash</option><option>Trust Transfer</option></select></div>
+        <div><label>Reference / note</label><input id="p_note" value=""></div>
+      </div>
+      <div class="note small muted" style="margin-top:10px">Current balance: <b>${money(bal)}</b>. Recording a payment that pays the invoice in full on or before a discount deadline lets you apply that prompt-payment discount from the invoice screen.</div>`;
+  }, ()=>{
+    p.date=$('#p_date').value; p.amount=Number($('#p_amt').value)||0; p.method=$('#p_method').value; p.note=$('#p_note').value;
+    if(p.amount<=0){ alert('Enter an amount.'); return false; }
+    DB.payments.push(p); recomputeInvoiceStatus(inv); save(); render(); return true;
+  });
+}
+function recomputeInvoiceStatus(inv){
+  if(inv.status==='void') return;
+  inv.status = invoiceBalance(inv)<=0.005 ? 'paid' : 'open';
+}
+
+/* =========================================================================
+   INVOICE / STATEMENT / RETAINER DOCUMENTS
+   ========================================================================= */
+function firmBlock(){
+  const f=DB.firm;
+  return `<div class="firm"><b style="font-size:15px">${esc(f.name)}</b>
+    ${f.line1?`<div>${esc(f.line1)}</div>`:''}
+    <div>${esc([f.city,f.state,f.zip].filter(Boolean).join(', '))}</div>
+    ${f.phone?`<div>${esc(f.phone)}</div>`:''}${f.email?`<div>${esc(f.email)}</div>`:''}</div>`;
+}
+function clientBlock(c){
+  return `<div>${esc(c.name)}${c.contact?`<div>Attn: ${esc(c.contact)}</div>`:''}
+    ${c.line1?`<div>${esc(c.line1)}</div>`:''}
+    <div>${esc([c.city,c.state,c.zip].filter(Boolean).join(', '))}</div></div>`;
+}
+
+function openInvoiceDoc(invId){
+  const inv=DB.invoices.find(i=>i.id===invId); if(!inv) return;
+  computeInvoiceTotals(inv); save();
+  const c=clientById(inv.clientId);
+  const b=invoiceBreakdown(inv);
+  const paid=invoicePaid(inv), bal=invoiceBalance(inv);
+
+  // group hourly/fixed/expense rows
+  const hourlyRows = b.hourly.length? b.hourly.map(e=>`<tr>
+      <td class="nowrap">${fmtDate(e.date)}</td><td>${esc(tkById(e.tkId)?.initials||'')}</td>
+      <td>${esc(e.desc)}${e.noCharge?`<div class="nc">No Charge — ${esc(e.ncNote||'')}</div>`:''}</td>
+      <td class="num">${num(e.hours)}</td><td class="num">${money(e.rate)}</td>
+      <td class="num">${e.noCharge?`<span class="nc">N/C</span>`:money(entryAmount(e))}</td></tr>`).join('') : '';
+  const fixedRows = b.fixed.map(e=>`<tr><td class="nowrap">${fmtDate(e.date)}</td><td colspan="3">${esc(e.desc)}</td><td></td><td class="num">${money(entryAmount(e))}</td></tr>`).join('');
+  const expRows = b.expense.map(e=>`<tr><td class="nowrap">${fmtDate(e.date)}</td><td colspan="3">${esc(e.desc)}</td><td></td><td class="num">${money(entryAmount(e))}</td></tr>`).join('');
+
+  const discCtrl = discountControls(inv, b);
+  const trustBal = trustBalance(inv.clientId);
+
+  const doc = `
+    <div class="docbar noprint">
+      <button class="btn" onclick="window.print()">🖨 Print / Save PDF</button>
+      <button class="btn sec" id="editDisc">Discount options</button>
+      <button class="btn sec" id="applyTrustBtn">Apply Trust</button>
+      <button class="btn sec" id="voidBtn">${inv.status==='void'?'Un-void':'Void'}</button>
+      <span class="spacer"></span>
+      <button class="btn sec" id="backBtn">← Back to invoices</button>
+    </div>
+    <div class="doc">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        ${firmBlock()}
+        <div class="right"><h1>INVOICE</h1>
+          <div><span class="lbl">Invoice</span> ${esc(inv.number)}</div>
+          <div><span class="lbl">Date</span> ${fmtDate(inv.date)}</div>
+          <div><span class="lbl">Due</span> ${fmtDate(inv.dueDate)}</div>
+        </div>
+      </div>
+      <hr style="border:none;border-top:2px solid #333;margin:14px 0">
+      <div style="display:flex;justify-content:space-between;gap:20px">
+        <div><div class="lbl">Bill To</div>${clientBlock(c)}</div>
+        <div class="right"><div class="lbl">Matter(s)</div><div>${esc(inv.matterNames||'—')}</div>
+          ${DB.firm.barNo?`<div class="lbl" style="margin-top:8px">Bar No.</div><div>${esc(DB.firm.barNo)}</div>`:''}</div>
+      </div>
+
+      <table style="margin-top:18px">
+        ${b.hourly.length?`
+        <tr><td colspan="6" class="sec-title">Professional Services — Hourly Fees</td></tr>
+        <tr><th style="width:70px">Date</th><th style="width:40px">Atty</th><th>Description</th><th class="num" style="width:50px">Hours</th><th class="num" style="width:70px">Rate</th><th class="num" style="width:80px">Amount</th></tr>
+        ${hourlyRows}
+        <tr class="totrow"><td colspan="5" class="num"><b>Total Hourly Fees</b></td><td class="num"><b>${money(b.hourlyCharged)}</b></td></tr>
+        `:''}
+        ${b.fixed.length?`
+        <tr><td colspan="6" class="sec-title">Fixed Fees</td></tr>
+        <tr><th style="width:70px">Date</th><th colspan="3">Description</th><th></th><th class="num" style="width:80px">Amount</th></tr>
+        ${fixedRows}
+        <tr class="totrow"><td colspan="5" class="num"><b>Total Fixed Fees</b></td><td class="num"><b>${money(b.fixedTotal)}</b></td></tr>
+        `:''}
+        ${b.expense.length?`
+        <tr><td colspan="6" class="sec-title">Out-of-Pocket Expenses (Costs Advanced)</td></tr>
+        <tr><th style="width:70px">Date</th><th colspan="3">Description</th><th></th><th class="num" style="width:80px">Amount</th></tr>
+        ${expRows}
+        <tr class="totrow"><td colspan="5" class="num"><b>Total Expenses</b></td><td class="num"><b>${money(b.expenseTotal)}</b></td></tr>
+        `:''}
+      </table>
+
+      <div style="display:flex;justify-content:flex-end;margin-top:14px">
+        <table style="width:340px">
+          <tr class="totrow"><td>Subtotal (fees &amp; costs)</td><td class="num">${money(b.subtotal)}</td></tr>
+          ${b.discountApplied>0?`<tr class="totrow"><td>${esc(b.discountLabel||'Discount')} (${num(b.discountPercent)}%)</td><td class="num">-${money(b.discountApplied)}</td></tr>`:''}
+          ${inv.priorBalance?`<tr class="totrow"><td>Prior balance</td><td class="num">${money(inv.priorBalance)}</td></tr>`:''}
+          <tr class="grand"><td>Total Amount Due</td><td class="num">${money(b.grandTotal)}</td></tr>
+          ${paid>0?`<tr class="totrow"><td>Payments / credits received</td><td class="num">-${money(paid)}</td></tr>
+          <tr class="grand"><td>Balance Due</td><td class="num">${money(bal)}</td></tr>`:''}
+        </table>
+      </div>
+
+      ${discountNotice(inv,b)}
+      ${trustBal>0?`<div class="note">Client trust (IOLTA) balance available: <b>${money(trustBal)}</b>. ${esc(DB.firm.trustNotice)}</div>`:''}
+      <div class="note"><b>Terms.</b> ${esc(DB.firm.terms)}</div>
+      <div class="small" style="margin-top:16px;color:#666">This statement itemizes fees and costs in accordance with the Michigan Rules of Professional Conduct (MRPC 1.5). Please contact our office with any questions regarding this invoice.</div>
+    </div>`;
+  showDoc(doc);
+  $('#backBtn').onclick=()=>{ DB.ui.tab='invoices'; save(); render(); };
+  $('#editDisc').onclick=()=>editDiscount(inv);
+  $('#applyTrustBtn').onclick=()=>applyTrustToInvoice(inv);
+  $('#voidBtn').onclick=()=>{ inv.status = inv.status==='void'?'open':'void'; if(inv.status!=='void') recomputeInvoiceStatus(inv); save(); openInvoiceDoc(inv.id); };
+}
+
+function discountControls(){ return ''; }
+function discountNotice(inv,b){
+  if(!b.options.length) return '';
+  const rows=b.options.map(o=>{
+    const net=round2(b.subtotal - o.amount + (inv.priorBalance||0));
+    return `<tr><td>${esc(o.label)}</td><td>${esc(o.condText)}</td><td class="num">${num(o.percent)}%</td><td class="num">-${money(o.amount)}</td><td class="num"><b>${money(net)}</b></td></tr>`;
+  }).join('');
+  const d=inv.discountSnapshot;
+  return `<div class="note">
+    <b>Prompt-Payment Discount.</b> ${d.appliesTo==='all'?'Applies to hourly and fixed fees.':'Applies to hourly fees only.'}
+    ${d.note?`<div style="margin:4px 0">${esc(d.note)}</div>`:''}
+    <table style="margin-top:6px"><tr><th>Discount</th><th>Condition</th><th class="num">Rate</th><th class="num">Savings</th><th class="num">Net if applicable</th></tr>${rows}</table>
+    ${inv.discountOverride?.keepAvailable?`<div style="margin-top:6px"><i>Discount eligibility extended by the firm; the above remains available notwithstanding the stated deadline.</i></div>`:''}
+  </div>`;
+}
+
+function editDiscount(inv){
+  const b=invoiceBreakdown(inv);
+  const ov=inv.discountOverride||(inv.discountOverride={mode:'auto',tierId:'',customPct:0,keepAvailable:false});
+  openModal('Discount — '+inv.number, body=>{
+    body.innerHTML=`
+      <div class="small muted" style="margin-bottom:10px">Choose how the discount is applied to the invoice total. “Automatic” selects the best tier that is still within its deadline as of today (${fmtDate(todayISO())}).</div>
+      <label class="chk" style="margin:6px 0"><input type="radio" name="ovm" value="auto" ${ov.mode==='auto'?'checked':''}> Automatic (deadline-based)</label>
+      <label class="chk" style="margin:6px 0"><input type="radio" name="ovm" value="none" ${ov.mode==='none'?'checked':''}> No discount applied to total</label>
+      ${b.options.map(o=>`<label class="chk" style="margin:6px 0"><input type="radio" name="ovm" value="tier:${o.id}" ${ov.mode==='tier'&&ov.tierId===o.id?'checked':''}> Force apply: ${esc(o.label)} (${num(o.percent)}% = -${money(o.amount)})</label>`).join('')}
+      <label class="chk" style="margin:6px 0"><input type="radio" name="ovm" value="custom" ${ov.mode==='custom'?'checked':''}> Custom override %: <input type="number" id="ov_pct" value="${ov.customPct||0}" step="0.5" style="width:90px;margin-left:6px"></label>
+      <hr class="hr">
+      <label class="chk"><input type="checkbox" id="ov_keep" ${ov.keepAvailable?'checked':''}> <b>Extend eligibility</b> — keep discounts available even after their deadline passes (overrides automatic removal when we extend the offer)</label>`;
+  }, ()=>{
+    const v=body.querySelector('input[name="ovm"]:checked')?.value||'auto';
+    if(v==='auto'){ ov.mode='auto'; ov.tierId=''; }
+    else if(v==='none'){ ov.mode='none'; ov.tierId=''; }
+    else if(v==='custom'){ ov.mode='custom'; ov.customPct=Number($('#ov_pct').value)||0; }
+    else if(v.startsWith('tier:')){ ov.mode='tier'; ov.tierId=v.slice(5); }
+    ov.keepAvailable=$('#ov_keep').checked;
+    computeInvoiceTotals(inv); save(); openInvoiceDoc(inv.id); return true;
+  });
+}
+
+function applyTrustToInvoice(inv){
+  const bal=invoiceBalance(inv);
+  const tb=trustBalance(inv.clientId);
+  if(tb<=0){ alert('No trust funds available for this client.'); return; }
+  let amt=Math.min(bal,tb);
+  openModal('Apply Trust to '+inv.number, body=>{
+    body.innerHTML=`<div class="grid g2">
+      <div><label>Amount to apply</label><input type="number" id="t_amt" value="${round2(amt)}" step="0.01"></div>
+      <div><label>Date</label><input type="date" id="t_date" value="${todayISO()}"></div>
+    </div>
+    <div class="note small muted" style="margin-top:10px">Trust available: <b>${money(tb)}</b> · Invoice balance: <b>${money(bal)}</b>.
+    Applying trust records a disbursement from the client’s IOLTA account to fees/costs earned (MRPC 1.15).</div>`;
+  }, ()=>{
+    amt=Number($('#t_amt').value)||0;
+    if(amt<=0){ alert('Enter an amount.'); return false; }
+    if(amt>tb+0.005){ alert('Exceeds available trust balance.'); return false; }
+    DB.trust.push({id:uid('tr'), clientId:inv.clientId, matterId:inv.matterIds[0]||null, date:$('#t_date').value,
+      type:'apply', amount:round2(amt), note:'Applied to invoice '+inv.number, invoiceId:inv.id});
+    recomputeInvoiceStatus(inv); save(); openInvoiceDoc(inv.id); return true;
+  });
+}
+
+/* =========================================================================
+   RETAINERS & TRUST
+   ========================================================================= */
+function trustBalance(clientId){
+  return round2(DB.trust.filter(t=>t.clientId===clientId).reduce((s,t)=>{
+    if(t.type==='deposit') return s+t.amount;
+    if(t.type==='apply'||t.type==='refund') return s-t.amount;
+    if(t.type==='adjust') return s+t.amount;
+    return s;
+  },0));
+}
+function viewTrust(main){
+  main.innerHTML=`
+    <div class="topbar"><div><h1>Retainers &amp; Trust</h1><div class="sub">Client trust / IOLTA ledger and retainer requests (MRPC 1.15)</div></div>
+      <div class="pill-row">
+        <button class="btn" id="newRet">＋ Retainer Request</button>
+        <button class="btn sec" id="newDeposit">＋ Record Deposit</button>
+      </div></div>
+    <div class="grid g2">
+      <div class="card"><h3>Trust Balances by Client</h3><div id="trustBal"></div></div>
+      <div class="card"><h3>Retainer Requests</h3><div id="retList"></div></div>
+    </div>
+    <div class="card"><h3>Trust Ledger <span class="r"><select id="ledgerClient" style="width:auto"></select></span></h3><div id="ledger"></div></div>`;
+  $('#newRet').onclick=()=>editRetainer();
+  $('#newDeposit').onclick=()=>recordTrust('deposit');
+
+  $('#trustBal').innerHTML = DB.clients.length? `<table><thead><tr><th>Client</th><th class="num">Balance</th><th></th></tr></thead><tbody>`+
+    DB.clients.map(c=>`<tr><td>${esc(c.name)}</td><td class="num">${money(trustBalance(c.id))}</td>
+      <td class="right"><button class="btn ghost sm" data-refund="${c.id}">Refund</button></td></tr>`).join('')+`</tbody></table>`
+    : `<div class="empty">No clients.</div>`;
+  $('#trustBal').querySelectorAll('[data-refund]').forEach(b=>b.onclick=()=>recordTrust('refund',b.dataset.refund));
+
+  const rl=$('#retList');
+  rl.innerHTML = DB.retainers.length? `<table><thead><tr><th>No.</th><th>Client</th><th class="num">Amount</th><th>Status</th><th></th></tr></thead><tbody>`+
+    DB.retainers.slice().reverse().map(r=>`<tr><td><b>${esc(r.number)}</b><br><span class="small muted">${fmtDate(r.date)}</span></td>
+      <td>${esc(clientById(r.clientId)?.name||'—')}<br><span class="small muted">${esc(matterById(r.matterId)?.name||'')}</span></td>
+      <td class="num">${money(r.amount)}</td>
+      <td>${r.status==='funded'?'<span class="tag good">Funded</span>':'<span class="tag warn">Requested</span>'}</td>
+      <td class="right nowrap"><button class="btn ghost sm" data-openret="${r.id}">Open</button>
+        ${r.status!=='funded'?`<button class="btn ghost sm" data-fund="${r.id}">Mark funded</button>`:''}</td></tr>`).join('')+`</tbody></table>`
+    : `<div class="empty">No retainer requests.</div>`;
+  rl.querySelectorAll('[data-openret]').forEach(b=>b.onclick=()=>openRetainerDoc(b.dataset.openret));
+  rl.querySelectorAll('[data-fund]').forEach(b=>b.onclick=()=>fundRetainer(b.dataset.fund));
+
+  const lc=$('#ledgerClient');
+  lc.innerHTML=`<option value="">All clients</option>`+DB.clients.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  lc.value=viewTrust._lc||''; lc.onchange=()=>{ viewTrust._lc=lc.value; drawLedger(); };
+  drawLedger();
+  function drawLedger(){
+    let tx=DB.trust.slice();
+    if(viewTrust._lc) tx=tx.filter(t=>t.clientId===viewTrust._lc);
+    tx.sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+    const w=$('#ledger');
+    if(!tx.length){ w.innerHTML=`<div class="empty">No trust transactions.</div>`; return; }
+    let run={};
+    w.innerHTML=`<table><thead><tr><th>Date</th><th>Client</th><th>Type</th><th>Description</th><th class="num">In</th><th class="num">Out</th><th class="num">Balance</th><th></th></tr></thead><tbody>`+
+      tx.map(t=>{
+        const inAmt=(t.type==='deposit'||t.type==='adjust'&&t.amount>=0)?t.amount:0;
+        const outAmt=(t.type==='apply'||t.type==='refund'||(t.type==='adjust'&&t.amount<0))?Math.abs(t.amount):0;
+        run[t.clientId]=(run[t.clientId]||0)+(t.type==='deposit'?t.amount:t.type==='adjust'?t.amount:-t.amount);
+        return `<tr><td class="nowrap">${fmtDate(t.date)}</td><td class="small">${esc(clientById(t.clientId)?.name||'')}</td>
+          <td>${trustTypeTag(t.type)}</td><td>${esc(t.note||'')}</td>
+          <td class="num">${inAmt?money(inAmt):''}</td><td class="num">${outAmt?money(outAmt):''}</td>
+          <td class="num">${money(run[t.clientId])}</td>
+          <td class="right">${t.invoiceId?'':`<button class="btn ghost sm" data-deltr="${t.id}">✕</button>`}</td></tr>`;
+      }).join('')+`</tbody></table>`;
+    w.querySelectorAll('[data-deltr]').forEach(b=>b.onclick=()=>{ if(confirm('Delete this trust transaction?')){ DB.trust=DB.trust.filter(x=>x.id!==b.dataset.deltr); save(); render(); } });
+  }
+}
+function trustTypeTag(t){ return t==='deposit'?'<span class="tag good">Deposit</span>':t==='apply'?'<span class="tag info">Applied</span>':t==='refund'?'<span class="tag warn">Refund</span>':'<span class="tag gray">Adjust</span>'; }
+
+function recordTrust(type, clientId){
+  let t={id:uid('tr'), clientId:clientId||DB.clients[0]?.id||'', matterId:null, date:todayISO(), type, amount:0, note:type==='deposit'?'Retainer deposit into trust':type==='refund'?'Refund of unearned trust to client':'', invoiceId:null};
+  if(!DB.clients.length){ alert('Create a client first.'); return; }
+  openModal(type==='deposit'?'Record Trust Deposit':type==='refund'?'Record Trust Refund':'Trust Adjustment', body=>{
+    body.innerHTML=`<div class="grid g2">
+      <div><label>Client</label><select id="t_client">${DB.clients.map(c=>`<option value="${c.id}"${c.id===t.clientId?' selected':''}>${esc(c.name)}</option>`).join('')}</select></div>
+      <div><label>Date</label><input type="date" id="t_date" value="${t.date}"></div>
+      <div><label>Amount</label><input type="number" id="t_amt" value="0" step="0.01"></div>
+      <div><label>Note</label><input id="t_note" value="${esc(t.note)}"></div>
+    </div>
+    ${type==='refund'?`<div class="note small muted" style="margin-top:10px">Refunds reduce the trust balance. Refund only unearned funds to the client (MRPC 1.15/1.16).</div>`:''}`;
+  }, ()=>{
+    t.clientId=$('#t_client').value; t.date=$('#t_date').value; t.amount=round2(Number($('#t_amt').value)||0); t.note=$('#t_note').value;
+    if(t.amount<=0){ alert('Enter a positive amount.'); return false; }
+    if(type==='refund' && t.amount>trustBalance(t.clientId)+0.005){ alert('Refund exceeds trust balance.'); return false; }
+    DB.trust.push(t); save(); render(); return true;
+  });
+}
+
+function editRetainer(){
+  if(!DB.clients.length){ alert('Create a client first.'); return; }
+  let r={id:uid('ret'), number:DB.firm.retainerPrefix+DB.firm.nextRetainerNo, clientId:DB.clients[0].id,
+    matterId:mattersFor(DB.clients[0].id)[0]?.id||'', date:todayISO(), amount:0,
+    purpose:'advance fees and costs to be held in the firm’s IOLTA client trust account and applied to fees and expenses as earned or incurred', status:'requested'};
+  openModal('New Retainer Request', body=>{
+    const drawMatters=(cid,selId)=>mattersFor(cid).map(m=>`<option value="${m.id}"${m.id===selId?' selected':''}>${esc(m.name)}</option>`).join('');
+    body.innerHTML=`<div class="grid g2">
+      <div><label>Client</label><select id="r_client">${DB.clients.map(c=>`<option value="${c.id}"${c.id===r.clientId?' selected':''}>${esc(c.name)}</option>`).join('')}</select></div>
+      <div><label>Matter</label><select id="r_matter">${drawMatters(r.clientId,r.matterId)}</select></div>
+      <div><label>Date</label><input type="date" id="r_date" value="${r.date}"></div>
+      <div><label>Requested amount</label><input type="number" id="r_amt" value="0" step="50"></div>
+      <div style="grid-column:1/-1"><label>Purpose / description</label><textarea id="r_purpose">${esc(r.purpose)}</textarea></div>
+    </div>`;
+    $('#r_client',body).onchange=e=>{ $('#r_matter',body).innerHTML=drawMatters(e.target.value,''); };
+  }, ()=>{
+    r.clientId=$('#r_client').value; r.matterId=$('#r_matter').value; r.date=$('#r_date').value;
+    r.amount=round2(Number($('#r_amt').value)||0); r.purpose=$('#r_purpose').value;
+    if(r.amount<=0){ alert('Enter a requested amount.'); return false; }
+    DB.retainers.push(r); DB.firm.nextRetainerNo++; save(); render(); openRetainerDoc(r.id); return true;
+  });
+}
+function fundRetainer(id){
+  const r=DB.retainers.find(x=>x.id===id);
+  if(confirm(`Mark ${r.number} as funded and record a ${money(r.amount)} trust deposit for ${clientById(r.clientId)?.name}?`)){
+    r.status='funded';
+    DB.trust.push({id:uid('tr'), clientId:r.clientId, matterId:r.matterId, date:todayISO(), type:'deposit',
+      amount:r.amount, note:'Retainer '+r.number+' deposited into trust', invoiceId:null});
+    save(); render();
+  }
+}
+function openRetainerDoc(id){
+  const r=DB.retainers.find(x=>x.id===id); const c=clientById(r.clientId); const m=matterById(r.matterId);
+  const doc=`
+    <div class="docbar noprint">
+      <button class="btn" onclick="window.print()">🖨 Print / Save PDF</button>
+      ${r.status!=='funded'?`<button class="btn sec" id="fundBtn">Mark funded &amp; deposit</button>`:'<span class="tag good" style="align-self:center">Funded</span>'}
+      <span class="spacer"></span><button class="btn sec" id="backBtn">← Back</button>
+    </div>
+    <div class="doc">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        ${firmBlock()}
+        <div class="right"><h1>RETAINER REQUEST</h1>
+          <div><span class="lbl">No.</span> ${esc(r.number)}</div>
+          <div><span class="lbl">Date</span> ${fmtDate(r.date)}</div></div>
+      </div>
+      <hr style="border:none;border-top:2px solid #333;margin:14px 0">
+      <div><div class="lbl">To</div>${clientBlock(c)}</div>
+      <div style="margin-top:8px"><span class="lbl">Matter</span> ${esc(m?.name||'')} ${m?.number?`(No. ${esc(m.number)})`:''}</div>
+      <p style="margin-top:18px">Dear ${esc(c.contact||c.name)}:</p>
+      <p>We respectfully request an advance deposit (retainer) in the amount of <b>${money(r.amount)}</b> in connection with the above matter.</p>
+      <p>These funds represent ${esc(r.purpose)}.</p>
+      <div style="display:flex;justify-content:flex-end;margin-top:10px">
+        <table style="width:320px"><tr class="grand"><td>Amount Requested</td><td class="num">${money(r.amount)}</td></tr></table>
+      </div>
+      <div class="note">${esc(DB.firm.trustNotice)} Any portion of the advance not earned or expended will be refunded to you.</div>
+      ${DB.firm.trustBank||DB.firm.trustAcct?`<div class="note"><b>Remittance.</b> Please remit to the firm’s client trust account${DB.firm.trustBank?` at ${esc(DB.firm.trustBank)}`:''}${DB.firm.trustAcct?`, account ${esc(DB.firm.trustAcct)}`:''}, or by check payable to ${esc(DB.firm.name)} Client Trust Account (IOLTA).</div>`:''}
+      <div class="sig">Sincerely,<br><br>${esc(DB.firm.name)}${DB.firm.barNo?`<br><span class="small">Bar No. ${esc(DB.firm.barNo)}</span>`:''}</div>
+    </div>`;
+  showDoc(doc);
+  $('#backBtn').onclick=()=>{ DB.ui.tab='trust'; save(); render(); };
+  const fb=$('#fundBtn'); if(fb) fb.onclick=()=>{ fundRetainer(r.id); openRetainerDoc(r.id); };
+}
+
+/* =========================================================================
+   STATEMENTS OF ACCOUNT
+   ========================================================================= */
+function viewStatements(main){
+  main.innerHTML=`
+    <div class="topbar"><div><h1>Statements of Account</h1><div class="sub">Full account summary per client: invoices, payments, balances, and trust</div></div></div>
+    <div class="card">
+      <div class="row">
+        <div style="min-width:260px"><label>Client</label><select id="s_client">${DB.clients.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></div>
+        <div><label>&nbsp;</label><button class="btn" id="genStmt">Generate Statement</button></div>
+      </div>
+    </div>
+    <div id="stmtPreview"></div>`;
+  if(!DB.clients.length){ $('#stmtPreview').innerHTML=`<div class="card"><div class="empty">No clients.</div></div>`; return; }
+  $('#genStmt').onclick=()=>openStatementDoc($('#s_client').value);
+  // show quick preview list
+  const c0=DB.clients[0];
+  $('#s_client').onchange=()=>{};
+}
+function openStatementDoc(clientId){
+  const c=clientById(clientId);
+  const invs=DB.invoices.filter(i=>i.clientId===clientId&&i.status!=='void').sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const pays=DB.payments.filter(p=>p.clientId===clientId).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const totalBilled=round2(invs.reduce((s,i)=>s+(i.grandTotal||0),0));
+  const totalPaid=round2(invs.reduce((s,i)=>s+invoicePaid(i),0));
+  const totalDue=round2(invs.reduce((s,i)=>s+invoiceBalance(i),0));
+  const trustBal=trustBalance(clientId);
+
+  const invRows=invs.map(i=>`<tr><td class="nowrap">${fmtDate(i.date)}</td><td>${esc(i.number)}</td><td>${esc(i.matterNames||'')}</td>
+    <td class="num">${money(i.grandTotal)}</td><td class="num">${money(invoicePaid(i))}</td><td class="num">${money(invoiceBalance(i))}</td></tr>`).join('')
+    || `<tr><td colspan="6" class="center" style="color:#888">No invoices.</td></tr>`;
+
+  const doc=`
+    <div class="docbar noprint">
+      <button class="btn" onclick="window.print()">🖨 Print / Save PDF</button>
+      <span class="spacer"></span><button class="btn sec" id="backBtn">← Back</button>
+    </div>
+    <div class="doc">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        ${firmBlock()}
+        <div class="right"><h1>STATEMENT OF ACCOUNT</h1>
+          <div><span class="lbl">As of</span> ${fmtDate(todayISO())}</div></div>
+      </div>
+      <hr style="border:none;border-top:2px solid #333;margin:14px 0">
+      <div><div class="lbl">Client</div>${clientBlock(c)}</div>
+
+      <table style="margin-top:18px">
+        <tr><td colspan="6" class="sec-title">Invoices</td></tr>
+        <tr><th>Date</th><th>Invoice</th><th>Matter(s)</th><th class="num">Total</th><th class="num">Paid/Credited</th><th class="num">Balance</th></tr>
+        ${invRows}
+        <tr class="totrow"><td colspan="3" class="num"><b>Totals</b></td><td class="num"><b>${money(totalBilled)}</b></td><td class="num"><b>${money(totalPaid)}</b></td><td class="num"><b>${money(totalDue)}</b></td></tr>
+      </table>
+
+      ${pays.length?`<table style="margin-top:16px">
+        <tr><td colspan="4" class="sec-title">Payments Received</td></tr>
+        <tr><th>Date</th><th>Method</th><th>Reference</th><th class="num">Amount</th></tr>
+        ${pays.map(p=>`<tr><td class="nowrap">${fmtDate(p.date)}</td><td>${esc(p.method)}</td><td>${esc(p.note||'')}${p.invoiceId?' — '+esc(DB.invoices.find(i=>i.id===p.invoiceId)?.number||''):''}</td><td class="num">${money(p.amount)}</td></tr>`).join('')}
+      </table>`:''}
+
+      <div style="display:flex;justify-content:flex-end;margin-top:16px">
+        <table style="width:340px">
+          <tr class="totrow"><td>Total billed</td><td class="num">${money(totalBilled)}</td></tr>
+          <tr class="totrow"><td>Total paid / credited</td><td class="num">-${money(totalPaid)}</td></tr>
+          <tr class="grand"><td>Balance Due</td><td class="num">${money(totalDue)}</td></tr>
+          <tr class="totrow"><td>Client trust (IOLTA) balance</td><td class="num">${money(trustBal)}</td></tr>
+        </table>
+      </div>
+      <div class="note">${esc(DB.firm.trustNotice)}</div>
+      <div class="small" style="margin-top:14px;color:#666">Prepared in accordance with the Michigan Rules of Professional Conduct.</div>
+    </div>`;
+  showDoc(doc);
+  $('#backBtn').onclick=()=>{ DB.ui.tab='statements'; save(); render(); };
+}
+
+/* =========================================================================
+   FIRM SETTINGS
+   ========================================================================= */
+function viewSettings(main){
+  const f=DB.firm;
+  main.innerHTML=`
+    <div class="topbar"><div><h1>Firm Settings</h1><div class="sub">Firm identity, trust account, numbering, and default terms</div></div></div>
+    <div class="card"><h3>Firm Information</h3>
+      <div class="grid g2">
+        <div><label>Firm name</label><input id="f_name" value="${esc(f.name)}"></div>
+        <div><label>Attorney / Bar No.</label><input id="f_bar" value="${esc(f.barNo)}"></div>
+        <div><label>Address line</label><input id="f_line1" value="${esc(f.line1)}"></div>
+        <div class="grid g3" style="gap:8px">
+          <div><label>City</label><input id="f_city" value="${esc(f.city)}"></div>
+          <div><label>State</label><input id="f_state" value="${esc(f.state)}"></div>
+          <div><label>ZIP</label><input id="f_zip" value="${esc(f.zip)}"></div>
+        </div>
+        <div><label>Phone</label><input id="f_phone" value="${esc(f.phone)}"></div>
+        <div><label>Email</label><input id="f_email" value="${esc(f.email)}"></div>
+        <div><label>EIN / Tax ID</label><input id="f_ein" value="${esc(f.ein)}"></div>
+      </div>
+    </div>
+    <div class="card"><h3>Client Trust (IOLTA) Account</h3>
+      <div class="grid g2">
+        <div><label>Trust bank name</label><input id="f_tbank" value="${esc(f.trustBank)}"></div>
+        <div><label>Trust account (last 4 / reference)</label><input id="f_tacct" value="${esc(f.trustAcct)}"></div>
+        <div style="grid-column:1/-1"><label>Trust notice (prints on invoices, statements, retainer requests)</label><textarea id="f_tnotice">${esc(f.trustNotice)}</textarea></div>
+      </div>
+    </div>
+    <div class="card"><h3>Numbering &amp; Terms</h3>
+      <div class="grid g2">
+        <div><label>Invoice prefix</label><input id="f_iprefix" value="${esc(f.invoicePrefix)}"></div>
+        <div><label>Next invoice number</label><input type="number" id="f_inext" value="${f.nextInvoiceNo}"></div>
+        <div><label>Retainer prefix</label><input id="f_rprefix" value="${esc(f.retainerPrefix)}"></div>
+        <div><label>Next retainer number</label><input type="number" id="f_rnext" value="${f.nextRetainerNo}"></div>
+        <div style="grid-column:1/-1"><label>Default payment terms (prints on invoices)</label><textarea id="f_terms">${esc(f.terms)}</textarea></div>
+      </div>
+    </div>
+    <div class="card"><h3>Timekeepers / Rates</h3><div id="tkList"></div>
+      <button class="btn sec sm" id="addTk" style="margin-top:8px">＋ Add timekeeper</button></div>
+    <div class="row"><button class="btn" id="saveSettings">Save Settings</button>
+      <span id="savedMsg" class="tag good" style="display:none;align-self:center">Saved ✓</span></div>
+    <div class="card" style="margin-top:18px"><h3>Data</h3>
+      <div class="pill-row">
+        <button class="btn sec" id="exportBtn">⬇ Export backup (JSON)</button>
+        <button class="btn sec" id="importBtn">⬆ Import backup</button>
+        <input type="file" id="importFile" accept="application/json" style="display:none">
+        <button class="btn danger" id="resetBtn">Reset all data</button>
+      </div>
+      <div class="small muted" style="margin-top:8px">All data is stored locally in this browser (localStorage). Export regularly to back up.</div>
+    </div>`;
+  drawTk();
+  $('#addTk').onclick=()=>{ DB.timekeepers.push({id:uid('tk'),name:'',initials:'',rate:0,active:true}); save(); drawTk(); };
+  $('#saveSettings').onclick=()=>{
+    const g=id=>$('#'+id).value;
+    Object.assign(f,{name:g('f_name'),barNo:g('f_bar'),line1:g('f_line1'),city:g('f_city'),state:g('f_state'),zip:g('f_zip'),
+      phone:g('f_phone'),email:g('f_email'),ein:g('f_ein'),trustBank:g('f_tbank'),trustAcct:g('f_tacct'),trustNotice:g('f_tnotice'),
+      invoicePrefix:g('f_iprefix'),nextInvoiceNo:Number(g('f_inext'))||1001,retainerPrefix:g('f_rprefix'),nextRetainerNo:Number(g('f_rnext'))||1,
+      terms:g('f_terms')});
+    save(); const m=$('#savedMsg'); m.style.display='inline-block'; setTimeout(()=>m.style.display='none',1500); render();
+  };
+  $('#exportBtn').onclick=exportData;
+  $('#importBtn').onclick=()=>$('#importFile').click();
+  $('#importFile').onchange=importData;
+  $('#resetBtn').onclick=()=>{ if(confirm('Erase ALL data and restore the sample database? This cannot be undone.')){ localStorage.removeItem(LS_KEY); DB=seed(); save(); render(); } };
+
+  function drawTk(){
+    const w=$('#tkList');
+    w.innerHTML=`<table><thead><tr><th>Name</th><th>Initials</th><th class="num">Rate</th><th></th></tr></thead><tbody>`+
+      DB.timekeepers.map(t=>`<tr data-id="${t.id}">
+        <td><input class="tk_name" value="${esc(t.name)}"></td>
+        <td><input class="tk_init" value="${esc(t.initials)}" style="max-width:90px"></td>
+        <td class="num"><input type="number" class="tk_rate" value="${t.rate}" step="5" style="max-width:110px"></td>
+        <td class="right"><button class="btn ghost sm tk_del">✕</button></td></tr>`).join('')+`</tbody></table>`;
+    w.querySelectorAll('tr[data-id]').forEach(r=>{
+      const t=tkById(r.dataset.id);
+      r.querySelector('.tk_name').oninput=e=>{ t.name=e.target.value; save(); };
+      r.querySelector('.tk_init').oninput=e=>{ t.initials=e.target.value; save(); };
+      r.querySelector('.tk_rate').oninput=e=>{ t.rate=Number(e.target.value)||0; save(); };
+      r.querySelector('.tk_del').onclick=()=>{ if(DB.timekeepers.length<=1){ alert('Keep at least one timekeeper.'); return; } DB.timekeepers=DB.timekeepers.filter(x=>x.id!==t.id); save(); drawTk(); };
+    });
+  }
+}
+function exportData(){
+  const blob=new Blob([JSON.stringify(DB,null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='legal-billing-backup-'+todayISO()+'.json'; a.click(); URL.revokeObjectURL(a.href);
+}
+function importData(ev){
+  const file=ev.target.files[0]; if(!file) return;
+  const rd=new FileReader();
+  rd.onload=()=>{ try{ const data=JSON.parse(rd.result); if(!data.firm||!data.clients){ throw new Error('Not a valid backup.'); }
+    if(confirm('Replace all current data with this backup?')){ DB=data; save(); render(); } }
+    catch(e){ alert('Import failed: '+e.message); } };
+  rd.readAsText(file);
+}
+
+/* =========================================================================
+   MODAL + DOC infra
+   ========================================================================= */
+function openModal(title, buildBody, onSave, extra, saveLabel){
+  const host=$('#modalHost');
+  host.innerHTML=`<div class="modal-bg"><div class="modal ${title.length>40?'wide':''}">
+    <div class="mh"><h3>${esc(title)}</h3><button class="x" id="mX">×</button></div>
+    <div class="mb" id="mBody"></div>
+    <div class="mf">
+      ${extra?.delete?`<button class="btn danger" id="mDel" style="margin-right:auto">Delete</button>`:''}
+      <button class="btn sec" id="mCancel">Cancel</button>
+      <button class="btn" id="mSave">${esc(saveLabel||'Save')}</button>
+    </div></div></div>`;
+  const body=$('#mBody'); buildBody(body);
+  $('#mX').onclick=closeModal; $('#mCancel').onclick=closeModal;
+  $('#modalHost .modal-bg').onclick=e=>{ if(e.target.classList.contains('modal-bg')) closeModal(); };
+  $('#mSave').onclick=()=>{ if(onSave()!==false) closeModal(); };
+  if(extra?.delete) $('#mDel').onclick=extra.delete;
+}
+function closeModal(){ $('#modalHost').innerHTML=''; }
+
+function showDoc(html){
+  $('#main').style.display='none'; $('#side').style.display='';
+  const w=$('#docwrap'); w.innerHTML=html; w.classList.add('show'); window.scrollTo(0,0);
+}
+function hideDoc(){ const w=$('#docwrap'); w.classList.remove('show'); w.innerHTML=''; $('#main').style.display=''; }
+
+/* ---------- boot ---------- */
+render();
+</script>
+</body>
+</html>
