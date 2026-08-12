@@ -100,7 +100,7 @@
   .modal .mh{padding:16px 20px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center;}
   .modal .mh h3{margin:0; font-size:16px;}
   .modal .mb{padding:20px; max-height:70vh; overflow:auto;}
-  .modal .mf{padding:14px 20px; border-top:1px solid var(--line); display:flex; justify-content:flex-end; gap:10px; background:#fafbfc;}
+  .modal .mf{padding:14px 20px; border-top:1px solid var(--line); display:flex; justify-content:flex-end; gap:10px; background:#fafbfc; flex-wrap:wrap;}
   .x{background:none; border:none; font-size:22px; color:var(--muted); cursor:pointer; line-height:1;}
 
   .chk{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--ink);}
@@ -656,11 +656,12 @@ function viewTime(main){
 }
 function typeTag(t){ return t==='hourly'?'<span class="tag info">Hourly</span>':t==='fixed'?'<span class="tag warn">Fixed</span>':'<span class="tag gray">Expense</span>'; }
 
-function editEntry(e, type, presetMatter){
+function editEntry(e, type, presetMatter, prefill){
   const isNew=!e;
   type = e?e.type:type;
-  e = e ? {...e} : {id:uid('en'), matterId:presetMatter||'', type, date:todayISO(), tkId:DB.timekeepers[0]?.id||'',
+  const defaults = {id:uid('en'), matterId:presetMatter||'', type, date:todayISO(), tkId:DB.timekeepers[0]?.id||'',
         desc:'', hours:0, rate:0, amount:0, noCharge:false, ncNote:'No charge as a professional courtesy.', invoiceId:null};
+  e = e ? {...e} : {...defaults, ...(prefill||{}), id:uid('en'), type, invoiceId:null};
   openModal(isNew?('New '+(type==='hourly'?'Hourly Entry':type==='fixed'?'Fixed Fee':'Expense')):'Edit Entry', body=>{
     body.innerHTML=`
       <div class="grid g2">
@@ -699,7 +700,10 @@ function editEntry(e, type, presetMatter){
       $('#e_matter',body).onchange=ev=>{ const m=matterById(ev.target.value); if(m && !Number($('#e_rate',body).value)) $('#e_rate',body).value=m.rate; upd(); };
       upd();
     }
-  }, ()=>{
+  }, persist, buildExtra(), null);
+
+  // Validate + write the entry to the database; returns the saved entry or false.
+  function persist(){
     e.matterId=$('#e_matter').value; if(!e.matterId){ alert('Select a matter.'); return false; }
     e.date=$('#e_date').value; e.desc=$('#e_desc').value.trim();
     if(!e.desc){ alert('Description is required (MRPC 1.5 — services must be itemized).'); return false; }
@@ -708,9 +712,18 @@ function editEntry(e, type, presetMatter){
       e.noCharge=$('#e_nc').checked; e.ncNote=$('#e_ncnote')?.value||'';
     }else{ e.amount=Number($('#e_amount').value)||0; }
     const ex=DB.entries.find(x=>x.id===e.id);
-    if(ex) Object.assign(ex,e); else DB.entries.push(e);
-    save(); render(); return true;
-  }, isNew?null:{delete:()=>{ if(confirm('Delete this entry?')){ DB.entries=DB.entries.filter(x=>x.id!==e.id); save(); render(); closeModal(); } }});
+    if(ex) Object.assign(ex,e); else DB.entries.push({...e});
+    save(); render();
+    return {...e};
+  }
+  function buildExtra(){
+    const extra={ buttons:[
+      {label:'Save & New', cls:'sec', onClick:()=>{ const s=persist(); if(s) editEntry(null, type, s.matterId, {matterId:s.matterId, date:s.date, tkId:s.tkId, rate:s.rate}); }},
+      {label:'Save & Duplicate', cls:'sec', onClick:()=>{ const s=persist(); if(s) editEntry(null, type, s.matterId, s); }},
+    ]};
+    if(!isNew) extra.delete=()=>{ if(confirm('Delete this entry?')){ DB.entries=DB.entries.filter(x=>x.id!==e.id); save(); render(); closeModal(); } };
+    return extra;
+  }
 }
 
 function unbilledEntries(){ return DB.entries.filter(e=>!e.invoiceId); }
@@ -1782,12 +1795,14 @@ function importData(ev){
    ========================================================================= */
 function openModal(title, buildBody, onSave, extra, saveLabel){
   const host=$('#modalHost');
+  const extraBtns=(extra?.buttons||[]).map((b,i)=>`<button class="btn ${b.cls||'sec'}" data-xb="${i}">${esc(b.label)}</button>`).join('');
   host.innerHTML=`<div class="modal-bg"><div class="modal ${title.length>40?'wide':''}">
     <div class="mh"><h3>${esc(title)}</h3><button class="x" id="mX">×</button></div>
     <div class="mb" id="mBody"></div>
     <div class="mf">
       ${extra?.delete?`<button class="btn danger" id="mDel" style="margin-right:auto">Delete</button>`:''}
       <button class="btn sec" id="mCancel">Cancel</button>
+      ${extraBtns}
       <button class="btn" id="mSave">${esc(saveLabel||'Save')}</button>
     </div></div></div>`;
   const body=$('#mBody'); buildBody(body);
@@ -1795,6 +1810,7 @@ function openModal(title, buildBody, onSave, extra, saveLabel){
   $('#modalHost .modal-bg').onclick=e=>{ if(e.target.classList.contains('modal-bg')) closeModal(); };
   $('#mSave').onclick=()=>{ if(onSave()!==false) closeModal(); };
   if(extra?.delete) $('#mDel').onclick=extra.delete;
+  (extra?.buttons||[]).forEach((b,i)=>{ const el=host.querySelector(`[data-xb="${i}"]`); if(el) el.onclick=()=>b.onClick(); });
 }
 function closeModal(){ $('#modalHost').innerHTML=''; }
 
