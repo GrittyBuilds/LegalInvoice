@@ -124,6 +124,14 @@
   .doc .nc{color:#7a4fb5; font-style:italic;}
   .doc .note{font-size:10.5px; color:#444; background:#f7f8fa; border:1px solid #e2e6ea; border-radius:5px; padding:10px 12px; margin-top:14px;}
   .doc .sig{margin-top:40px;}
+  /* Letterhead masthead */
+  .doc .lh{text-align:center; position:relative; padding:0 0 4px;}
+  .doc .lh-logo{position:absolute; left:0; top:0; max-height:70px; max-width:120px;}
+  .doc .lh-name{font-family:Arial,Helvetica,sans-serif; font-weight:700; color:#FF0000; font-size:20pt; line-height:1.1; letter-spacing:.01em;}
+  .doc .lh-addr{font-size:11px; color:#111;}
+  .doc .lh-contact{font-size:10px; color:#111; margin-top:3px;}
+  .doc .lh-rule{border:none; border-top:2px solid #333; margin:8px 0 14px;}
+  .doc .doctitle{font-size:20px; letter-spacing:.02em; margin:0 0 6px;}
   .docbar{position:sticky; top:0; background:#2b2d30; padding:10px 16px; display:flex; gap:10px; align-items:center; margin:-24px -24px 24px; z-index:5;}
   .docbar .btn{background:#3a7bd5;}
   @media print{
@@ -163,9 +171,27 @@ let DB = load();
 function load(){
   try{
     const raw = localStorage.getItem(LS_KEY);
-    if(raw) return JSON.parse(raw);
+    if(raw) return migrate(JSON.parse(raw));
   }catch(e){ console.warn('load failed', e); }
   return seed();
+}
+
+/* Fill in newly-added fields and apply the firm letterhead once. */
+function migrate(db){
+  const f = db.firm || (db.firm = {});
+  if(f.fax === undefined) f.fax = '';
+  if(f.website === undefined) f.website = '';
+  if(f.logo === undefined) f.logo = '';
+  if(!f._letterhead){
+    // Apply CM Advisory Corp letterhead (from the firm's letterhead document).
+    f.name = 'CM Advisory Corp';
+    f.line1 = '7457 Franklin Road, Suite 250';
+    f.city = 'Bloomfield Hills'; f.state = 'Michigan'; f.zip = '48301';
+    f.phone = '(248) 765-5427'; f.fax = '(248) 859-2985';
+    f.website = ''; f.logo = '';
+    f._letterhead = 'cm';
+  }
+  return db;
 }
 function save(){ localStorage.setItem(LS_KEY, JSON.stringify(DB)); }
 
@@ -174,8 +200,10 @@ function seed(){
   const matterId = uid('mt');
   return {
     firm:{
-      name:'Seyburn Law PLLC', line1:'', city:'', state:'MI', zip:'',
-      phone:'', email:'rangevine@seyburnlawpllc.com', barNo:'', ein:'',
+      name:'CM Advisory Corp', line1:'7457 Franklin Road, Suite 250',
+      city:'Bloomfield Hills', state:'Michigan', zip:'48301',
+      phone:'(248) 765-5427', fax:'(248) 859-2985', website:'', logo:'', _letterhead:'cm',
+      email:'', barNo:'', ein:'',
       trustBank:'', trustAcct:'', invoicePrefix:'INV-', nextInvoiceNo:1001,
       retainerPrefix:'RET-', nextRetainerNo:1,
       terms:'Payment due within 30 days of invoice date.',
@@ -218,6 +246,7 @@ const num = n => (Number(n)||0).toLocaleString('en-US',{minimumFractionDigits:2,
 const esc = s => String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const todayISO = () => new Date().toISOString().slice(0,10);
 function fmtDate(iso){ if(!iso) return ''; const [y,m,d]=iso.split('-'); return `${m}/${d}/${y}`; }
+function cityStateZip(city,state,zip){ const cs=[city,state].filter(Boolean).join(', '); return [cs,zip].filter(Boolean).join(' '); }
 function addDays(iso,n){ const d=new Date(iso+'T00:00:00'); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); }
 function endOfMonth(iso){ const d=new Date(iso+'T00:00:00'); const e=new Date(d.getFullYear(), d.getMonth()+1, 0); return e.toISOString().slice(0,10); }
 function clientById(id){ return DB.clients.find(c=>c.id===id); }
@@ -816,17 +845,29 @@ function recomputeInvoiceStatus(inv){
 /* =========================================================================
    INVOICE / STATEMENT / RETAINER DOCUMENTS
    ========================================================================= */
-function firmBlock(){
+/* Centered letterhead masthead used at the top of every printed document. */
+function letterhead(){
   const f=DB.firm;
-  return `<div class="firm"><b style="font-size:15px">${esc(f.name)}</b>
-    ${f.line1?`<div>${esc(f.line1)}</div>`:''}
-    <div>${esc([f.city,f.state,f.zip].filter(Boolean).join(', '))}</div>
-    ${f.phone?`<div>${esc(f.phone)}</div>`:''}${f.email?`<div>${esc(f.email)}</div>`:''}</div>`;
+  const addr=[f.line1, cityStateZip(f.city,f.state,f.zip)].filter(Boolean);
+  const contact=[];
+  if(f.website) contact.push('Website:  '+f.website);
+  if(f.phone) contact.push('Phone:  '+f.phone);
+  if(f.fax) contact.push('Facsimile:  '+f.fax);
+  if(f.email) contact.push('Email:  '+f.email);
+  return `<div class="lh">
+    ${f.logo?`<img src="${f.logo}" class="lh-logo" alt="logo">`:''}
+    <div class="lh-name">${esc((f.name||'').toUpperCase())}</div>
+    ${addr.map(a=>`<div class="lh-addr">${esc(a)}</div>`).join('')}
+    ${contact.length?`<div class="lh-contact">${contact.map(esc).join('   &#9674;   ')}</div>`:''}
+  </div>
+  <hr class="lh-rule">`;
 }
+/* kept for compatibility */
+function firmBlock(){ return letterhead(); }
 function clientBlock(c){
   return `<div>${esc(c.name)}${c.contact?`<div>Attn: ${esc(c.contact)}</div>`:''}
     ${c.line1?`<div>${esc(c.line1)}</div>`:''}
-    <div>${esc([c.city,c.state,c.zip].filter(Boolean).join(', '))}</div></div>`;
+    <div>${esc(cityStateZip(c.city,c.state,c.zip))}</div></div>`;
 }
 
 function openInvoiceDoc(invId){
@@ -858,19 +899,16 @@ function openInvoiceDoc(invId){
       <button class="btn sec" id="backBtn">← Back to invoices</button>
     </div>
     <div class="doc">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start">
-        ${firmBlock()}
-        <div class="right"><h1>INVOICE</h1>
+      ${letterhead()}
+      <div style="display:flex;justify-content:space-between;gap:20px;align-items:flex-start">
+        <div><div class="lbl">Bill To</div>${clientBlock(c)}
+          <div style="margin-top:8px"><span class="lbl">Matter(s)</span> ${esc(inv.matterNames||'—')}</div>
+          ${DB.firm.barNo?`<div><span class="lbl">Bar No.</span> ${esc(DB.firm.barNo)}</div>`:''}</div>
+        <div class="right"><h1 class="doctitle">INVOICE</h1>
           <div><span class="lbl">Invoice</span> ${esc(inv.number)}</div>
           <div><span class="lbl">Date</span> ${fmtDate(inv.date)}</div>
           <div><span class="lbl">Due</span> ${fmtDate(inv.dueDate)}</div>
         </div>
-      </div>
-      <hr style="border:none;border-top:2px solid #333;margin:14px 0">
-      <div style="display:flex;justify-content:space-between;gap:20px">
-        <div><div class="lbl">Bill To</div>${clientBlock(c)}</div>
-        <div class="right"><div class="lbl">Matter(s)</div><div>${esc(inv.matterNames||'—')}</div>
-          ${DB.firm.barNo?`<div class="lbl" style="margin-top:8px">Bar No.</div><div>${esc(DB.firm.barNo)}</div>`:''}</div>
       </div>
 
       <table style="margin-top:18px">
@@ -1108,14 +1146,13 @@ function openRetainerDoc(id){
       <span class="spacer"></span><button class="btn sec" id="backBtn">← Back</button>
     </div>
     <div class="doc">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start">
-        ${firmBlock()}
-        <div class="right"><h1>RETAINER REQUEST</h1>
+      ${letterhead()}
+      <div style="display:flex;justify-content:space-between;gap:20px;align-items:flex-start">
+        <div><div class="lbl">To</div>${clientBlock(c)}</div>
+        <div class="right"><h1 class="doctitle">RETAINER REQUEST</h1>
           <div><span class="lbl">No.</span> ${esc(r.number)}</div>
           <div><span class="lbl">Date</span> ${fmtDate(r.date)}</div></div>
       </div>
-      <hr style="border:none;border-top:2px solid #333;margin:14px 0">
-      <div><div class="lbl">To</div>${clientBlock(c)}</div>
       <div style="margin-top:8px"><span class="lbl">Matter</span> ${esc(m?.name||'')} ${m?.number?`(No. ${esc(m.number)})`:''}</div>
       <p style="margin-top:18px">Dear ${esc(c.contact||c.name)}:</p>
       <p>We respectfully request an advance deposit (retainer) in the amount of <b>${money(r.amount)}</b> in connection with the above matter.</p>
@@ -1170,13 +1207,12 @@ function openStatementDoc(clientId){
       <span class="spacer"></span><button class="btn sec" id="backBtn">← Back</button>
     </div>
     <div class="doc">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start">
-        ${firmBlock()}
-        <div class="right"><h1>STATEMENT OF ACCOUNT</h1>
+      ${letterhead()}
+      <div style="display:flex;justify-content:space-between;gap:20px;align-items:flex-start">
+        <div><div class="lbl">Client</div>${clientBlock(c)}</div>
+        <div class="right"><h1 class="doctitle">STATEMENT OF ACCOUNT</h1>
           <div><span class="lbl">As of</span> ${fmtDate(todayISO())}</div></div>
       </div>
-      <hr style="border:none;border-top:2px solid #333;margin:14px 0">
-      <div><div class="lbl">Client</div>${clientBlock(c)}</div>
 
       <table style="margin-top:18px">
         <tr><td colspan="6" class="sec-title">Invoices</td></tr>
@@ -1224,9 +1260,19 @@ function viewSettings(main){
           <div><label>ZIP</label><input id="f_zip" value="${esc(f.zip)}"></div>
         </div>
         <div><label>Phone</label><input id="f_phone" value="${esc(f.phone)}"></div>
+        <div><label>Facsimile</label><input id="f_fax" value="${esc(f.fax||'')}"></div>
+        <div><label>Website</label><input id="f_web" value="${esc(f.website||'')}"></div>
         <div><label>Email</label><input id="f_email" value="${esc(f.email)}"></div>
         <div><label>EIN / Tax ID</label><input id="f_ein" value="${esc(f.ein)}"></div>
       </div>
+      <div class="hr"></div>
+      <div class="row" style="align-items:center">
+        <div><label>Letterhead logo (optional)</label>
+          <input type="file" id="f_logofile" accept="image/*" style="max-width:280px"></div>
+        <div id="logoPrev">${f.logo?`<img src="${esc(f.logo)}" style="max-height:56px;max-width:120px;border:1px solid var(--line);border-radius:4px;padding:2px;background:#fff">`:'<span class="small muted">No logo</span>'}</div>
+        ${f.logo?`<div><button class="btn ghost sm" id="f_logoclear">Remove logo</button></div>`:''}
+      </div>
+      <div class="small muted" style="margin-top:6px">The firm name prints in red on printed invoices, statements, and retainer requests, matching your letterhead. A logo, if added, appears at the top-left of the masthead.</div>
     </div>
     <div class="card"><h3>Client Trust (IOLTA) Account</h3>
       <div class="grid g2">
@@ -1262,11 +1308,19 @@ function viewSettings(main){
   $('#saveSettings').onclick=()=>{
     const g=id=>$('#'+id).value;
     Object.assign(f,{name:g('f_name'),barNo:g('f_bar'),line1:g('f_line1'),city:g('f_city'),state:g('f_state'),zip:g('f_zip'),
-      phone:g('f_phone'),email:g('f_email'),ein:g('f_ein'),trustBank:g('f_tbank'),trustAcct:g('f_tacct'),trustNotice:g('f_tnotice'),
+      phone:g('f_phone'),fax:g('f_fax'),website:g('f_web'),email:g('f_email'),ein:g('f_ein'),trustBank:g('f_tbank'),trustAcct:g('f_tacct'),trustNotice:g('f_tnotice'),
       invoicePrefix:g('f_iprefix'),nextInvoiceNo:Number(g('f_inext'))||1001,retainerPrefix:g('f_rprefix'),nextRetainerNo:Number(g('f_rnext'))||1,
       terms:g('f_terms')});
     save(); const m=$('#savedMsg'); m.style.display='inline-block'; setTimeout(()=>m.style.display='none',1500); render();
   };
+  $('#f_logofile').onchange=ev=>{
+    const file=ev.target.files[0]; if(!file) return;
+    if(file.size>600000){ alert('Please use a logo image under ~600 KB.'); return; }
+    const rd=new FileReader();
+    rd.onload=()=>{ DB.firm.logo=rd.result; save(); viewSettings(main); };
+    rd.readAsDataURL(file);
+  };
+  const lc=$('#f_logoclear'); if(lc) lc.onclick=()=>{ DB.firm.logo=''; save(); viewSettings(main); };
   $('#exportBtn').onclick=exportData;
   $('#importBtn').onclick=()=>$('#importFile').click();
   $('#importFile').onchange=importData;
