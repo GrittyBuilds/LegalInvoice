@@ -1375,7 +1375,7 @@ function editDiscount(inv){
       <hr class="hr">
       <label class="chk"><input type="checkbox" id="ov_keep" ${ov.keepAvailable?'checked':''}> <b>Extend eligibility</b> — keep discounts available even after their deadline passes (overrides automatic removal when we extend the offer)</label>`;
   }, ()=>{
-    const v=body.querySelector('input[name="ovm"]:checked')?.value||'auto';
+    const v=document.querySelector('input[name="ovm"]:checked')?.value||'auto';
     if(v==='auto'){ ov.mode='auto'; ov.tierId=''; }
     else if(v==='none'){ ov.mode='none'; ov.tierId=''; }
     else if(v==='custom'){ ov.mode='custom'; ov.customPct=Number($('#ov_pct').value)||0; }
