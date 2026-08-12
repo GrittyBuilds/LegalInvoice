@@ -973,12 +973,17 @@ function newInvoiceFlow(){
     drawMatters(); drawEntries();
   }, ()=>{
     if(!sel.entryIds.size){ alert('Select at least one entry.'); return false; }
-    createInvoice(sel);
+    createInvoice(sel, false);
     return true;
-  }, null, 'Create Invoice');
+  }, {buttons:[
+    {label:'Create & Issue', cls:'', onClick:()=>{
+      if(!sel.entryIds.size){ alert('Select at least one entry.'); return; }
+      createInvoice(sel, true); closeModal();
+    }}
+  ]}, 'Create Draft');
 }
 
-function createInvoice(sel){
+function createInvoice(sel, issue){
   const entryIds=[...sel.entryIds];
   const mids=[...new Set(entryIds.map(id=>DB.entries.find(e=>e.id===id).matterId))];
   const number = DB.firm.invoicePrefix + (DB.firm.nextInvoiceNo++);
@@ -998,13 +1003,14 @@ function createInvoice(sel){
     entryIds,
     matterDiscounts,
     lineAdjust:{}, adjustment:{amount:0, label:'Adjustment'},
-    status:'draft', createdAt:todayISO()
+    status: issue ? 'open' : 'draft', createdAt:todayISO()
   };
   computeInvoiceTotals(inv);
-  // Snapshot the previous balance (as of the invoice date) — refreshed again on finalize.
+  // Snapshot the previous balance as of the invoice date.
   const snap = prevBalanceSnapshot(inv.clientId, inv.date, inv.id);
   inv.prevBalance = snap.prevBalance;
   inv.priorSnapshot = snap.priors;
+  if(issue) recomputeInvoiceStatus(inv);
   DB.invoices.push(inv);
   entryIds.forEach(id=>{ const e=DB.entries.find(x=>x.id===id); if(e) e.invoiceId=inv.id; });
   save();
