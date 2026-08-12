@@ -19,9 +19,11 @@ your data over.
 
 **Clients &amp; Matters**
 - Multiple matters per client, each with its own file number and default rate.
-- Per-client discount profile: **None**, **Flat %**, or **Tiered** prompt-payment.
+- **Per-matter discount profile**: **None**, **Flat %**, or **Tiered** — set on each
+  matter. A single invoice spanning several matters applies each matter's own
+  discount and aggregates them.
 
-**Tiered / variable discounts**
+**Tiered / variable discounts** (configured per matter)
 - Each tier has a percent, a condition, and a deadline computed from the invoice:
   - *within N days of the invoice*, or
   - *by the end of the invoice month*.

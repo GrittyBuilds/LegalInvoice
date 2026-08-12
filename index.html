@@ -162,8 +162,11 @@
   .doc .matter-hd{margin:22px 0 0; padding:7px 10px; background:var(--forest); color:#fff; font-weight:600;
     font-size:11.5px; letter-spacing:.03em; border-radius:5px 5px 0 0;}
   .doc .matter-hd .mnum{color:var(--gold); font-weight:500; font-size:10px; margin-left:8px;}
-  .doc .matter-sub{display:flex; justify-content:space-between; padding:7px 10px; margin-bottom:4px;
+  .doc .matter-sub{padding:7px 10px; margin-bottom:4px;
     background:var(--paper); border:1px solid #e6e3d9; border-top:none; border-radius:0 0 5px 5px; font-weight:600; font-size:11px; color:var(--ink);}
+  .doc .matter-sub .r{display:flex; justify-content:space-between; padding:1px 0;}
+  .doc .matter-sub .r.disc{color:var(--emerald); font-weight:500;}
+  .doc .matter-sub .r.tot{border-top:1px solid #e6e3d9; margin-top:3px; padding-top:4px;}
   .doc .matter-grp table:first-of-type{margin-top:0 !important;}
 
   /* Totals block */
@@ -262,6 +265,28 @@ function migrate(db){
     f.tagline = f.tagline || BRAND_TAGLINE;
     f._brandLogo = 1;
   }
+  // Move discounts from the client level to the matter level.
+  (db.matters||[]).forEach(m=>{
+    if(m.discount === undefined){
+      const c=(db.clients||[]).find(x=>x.id===m.clientId);
+      m.discount = (c && c.discount) ? JSON.parse(JSON.stringify(c.discount))
+        : {type:'none', appliesTo:'hourly', note:'', tiers:[]};
+    }
+  });
+  // Migrate existing invoices to per-matter discount snapshots/overrides.
+  (db.invoices||[]).forEach(inv=>{
+    if(inv.matterDiscounts === undefined){
+      inv.matterDiscounts = {};
+      (inv.matterIds||[]).forEach(mid=>{
+        inv.matterDiscounts[mid] = {
+          snapshot: inv.discountSnapshot ? JSON.parse(JSON.stringify(inv.discountSnapshot))
+            : {type:'none', appliesTo:'hourly', note:'', tiers:[]},
+          override: inv.discountOverride ? JSON.parse(JSON.stringify(inv.discountOverride))
+            : {mode:'auto', tierId:'', customPct:0, keepAvailable:false}
+        };
+      });
+    }
+  });
   return db;
 }
 function save(){ localStorage.setItem(LS_KEY, JSON.stringify(DB)); }
@@ -286,7 +311,12 @@ function seed(){
     ],
     clients:[{
       id:clientId, name:'Sample Client, Inc.', line1:'', city:'', state:'MI', zip:'',
-      email:'', phone:'', contact:'',
+      email:'', phone:'', contact:''
+    }],
+    matters:[{
+      id:matterId, clientId, name:'General Representation', number:'0001',
+      responsible:'', rate:350, status:'open',
+      description:'',
       discount:{
         type:'tiered',
         appliesTo:'hourly',
@@ -296,11 +326,6 @@ function seed(){
           {id:uid('t'), label:'Same-month payment', percent:10, cond:'eom', days:0}
         ]
       }
-    }],
-    matters:[{
-      id:matterId, clientId, name:'General Representation', number:'0001',
-      responsible:'', rate:350, status:'open',
-      description:''
     }],
     entries:[],        // {id,matterId,type:'hourly'|'fixed'|'expense',date,tkId,desc,hours,rate,amount,noCharge,ncNote,invoiceId|null}
     invoices:[],       // see createInvoice
@@ -429,12 +454,12 @@ function viewClients(main){
         ${[c.line1, [c.city,c.state,c.zip].filter(Boolean).join(', ')].filter(Boolean).join(' · ')||'No address'}
         ${c.email?' · '+esc(c.email):''} ${c.phone?' · '+esc(c.phone):''}
       </div>
-      <div style="margin:8px 0">${discountSummary(c)}</div>
-      ${ms.length? `<table><thead><tr><th>Matter</th><th>No.</th><th class="num">Rate</th><th>Status</th><th class="num">Unbilled</th><th></th></tr></thead><tbody>`+
+      ${ms.length? `<table><thead><tr><th>Matter</th><th>No.</th><th class="num">Rate</th><th>Discount</th><th>Status</th><th class="num">Unbilled</th><th></th></tr></thead><tbody>`+
         ms.map(m=>{
           const wip = unbilledEntries().filter(e=>e.matterId===m.id).reduce((s,e)=>s+entryAmount(e),0);
           return `<tr><td><b>${esc(m.name)}</b>${m.description?`<br><span class="small muted">${esc(m.description)}</span>`:''}</td>
             <td class="small">${esc(m.number||'—')}</td><td class="num">${money(m.rate)}</td>
+            <td>${discountSummary(m)}</td>
             <td>${m.status==='open'?'<span class="tag good">Open</span>':'<span class="tag gray">Closed</span>'}</td>
             <td class="num">${money(wip)}</td>
             <td class="right"><button class="btn ghost sm" data-editmt="${m.id}">Edit</button></td></tr>`;
@@ -446,12 +471,13 @@ function viewClients(main){
   list.querySelectorAll('[data-editmt]').forEach(b=>b.onclick=()=>editMatter(matterById(b.dataset.editmt)));
 }
 
-function discountSummary(c){
-  const d=c.discount||{type:'none'};
-  if(d.type==='none') return `<span class="tag gray">No discount</span>`;
-  if(d.type==='flat') return `<span class="tag info">Flat ${d.tiers?.[0]?.percent||0}% off ${d.appliesTo==='all'?'all fees':'hourly fees'}</span>`;
-  const tiers=(d.tiers||[]).map(t=>`<span class="tag info">${t.percent}% – ${condLabel(t)}</span>`).join(' ');
-  return `<span class="small muted">Tiered discount on ${d.appliesTo==='all'?'all fees':'hourly fees'}: </span>${tiers}`;
+function discountSummary(o){
+  const d=o.discount||{type:'none'};
+  if(d.type==='none') return `<span class="tag gray">None</span>`;
+  const scope = d.appliesTo==='all'?'all fees':'hourly';
+  if(d.type==='flat') return `<span class="tag info" title="Flat ${d.tiers?.[0]?.percent||0}% off ${scope}">Flat ${d.tiers?.[0]?.percent||0}%</span>`;
+  const tiers=(d.tiers||[]).map(t=>`<span class="tag info" title="${esc(condLabel(t))}">${t.percent}%</span>`).join(' ');
+  return `${tiers} <span class="small muted">(${scope})</span>`;
 }
 function condLabel(t){
   if(t.cond==='days') return `if paid in full within ${t.days} day(s) of invoice`;
@@ -460,11 +486,86 @@ function condLabel(t){
   return 'always';
 }
 
+/* Reusable discount-rules editor. Appends a fieldset to `body` and mutates target.discount. */
+function renderDiscountFieldset(body, target){
+  if(!target.discount) target.discount={type:'none', appliesTo:'hourly', note:'', tiers:[]};
+  const d=target.discount;
+  const fs=document.createElement('div');
+  fs.innerHTML=`<fieldset class="fieldset" style="margin-top:16px">
+    <legend>Discount rules (this matter)</legend>
+    <div class="grid g2">
+      <div><label>Discount type</label>
+        <select id="d_type">
+          <option value="none">None</option>
+          <option value="flat">Flat (single %)</option>
+          <option value="tiered">Tiered (by payment date)</option>
+        </select></div>
+      <div><label>Applies to</label>
+        <select id="d_applies">
+          <option value="hourly">Hourly fees only</option>
+          <option value="all">All fees (hourly + fixed)</option>
+        </select></div>
+    </div>
+    <div id="tiersWrap" style="margin-top:10px"></div>
+    <div><label>“Paid in full” / discount note (prints on invoice)</label>
+      <textarea id="d_note">${esc(d.note||'')}</textarea></div>
+  </fieldset>`;
+  body.appendChild(fs);
+  $('#d_type',body).value=d.type||'none'; $('#d_applies',body).value=d.appliesTo||'hourly';
+  function renderTiers(){
+    const type=$('#d_type',body).value;
+    const wrap=$('#tiersWrap',body);
+    if(type==='none'){ wrap.innerHTML=`<div class="small muted">This matter receives no discount.</div>`; return; }
+    if(type==='flat'){
+      if(!d.tiers[0]) d.tiers[0]={id:uid('t'),label:'Discount',percent:10,cond:'always',days:0};
+      d.tiers=[d.tiers[0]];
+      wrap.innerHTML=`<div class="row"><div style="max-width:160px"><label>Percent off</label>
+        <input type="number" id="flat_pct" value="${d.tiers[0].percent}" min="0" max="100" step="0.5"></div>
+        <div class="small muted">Applied to every invoice automatically.</div></div>`;
+      $('#flat_pct',body).oninput=e=>d.tiers[0].percent=Number(e.target.value)||0;
+      return;
+    }
+    wrap.innerHTML=`<div id="tierList"></div><button class="btn sec sm" id="addTier" type="button">＋ Add tier</button>`;
+    drawTierList();
+    $('#addTier',body).onclick=()=>{ d.tiers.push({id:uid('t'),label:'',percent:10,cond:'days',days:10}); drawTierList(); };
+    function drawTierList(){
+      const tl=$('#tierList',body);
+      tl.innerHTML=d.tiers.map((t,i)=>`
+        <div class="tier-row" data-i="${i}">
+          <input placeholder="Label (e.g. Early payment)" class="t_label" value="${esc(t.label)}">
+          <input type="number" class="t_pct" value="${t.percent}" min="0" max="100" step="0.5" title="Percent">
+          <select class="t_cond">
+            <option value="days"${t.cond==='days'?' selected':''}>within N days of invoice</option>
+            <option value="eom"${t.cond==='eom'?' selected':''}>by end of invoice month</option>
+          </select>
+          <input type="number" class="t_days" value="${t.days||0}" min="0" step="1" title="Days" style="${t.cond==='days'?'':'visibility:hidden'}">
+          <button class="btn ghost sm t_del" type="button" title="Remove">✕</button>
+        </div>`).join('') || `<div class="small muted">No tiers.</div>`;
+      tl.querySelectorAll('.tier-row').forEach(r=>{
+        const i=+r.dataset.i, t=d.tiers[i];
+        r.querySelector('.t_label').oninput=e=>t.label=e.target.value;
+        r.querySelector('.t_pct').oninput=e=>t.percent=Number(e.target.value)||0;
+        r.querySelector('.t_days').oninput=e=>t.days=Number(e.target.value)||0;
+        r.querySelector('.t_cond').onchange=e=>{ t.cond=e.target.value; drawTierList(); };
+        r.querySelector('.t_del').onclick=()=>{ d.tiers.splice(i,1); drawTierList(); };
+      });
+    }
+  }
+  renderTiers();
+  $('#d_type',body).onchange=renderTiers;
+}
+/* Read the discount fieldset back into target.discount. */
+function commitDiscountFieldset(target){
+  if(!target.discount) target.discount={type:'none',appliesTo:'hourly',note:'',tiers:[]};
+  target.discount.type=$('#d_type').value;
+  target.discount.appliesTo=$('#d_applies').value;
+  target.discount.note=$('#d_note').value;
+  if(target.discount.type==='none') target.discount.tiers=[];
+}
+
 function editClient(c){
   const isNew=!c;
-  c = c ? JSON.parse(JSON.stringify(c)) : {id:uid('cl'), name:'', line1:'', city:'', state:'MI', zip:'', email:'', phone:'', contact:'',
-        discount:{type:'none', appliesTo:'hourly', note:'', tiers:[]}};
-  if(!c.discount) c.discount={type:'none',appliesTo:'hourly',note:'',tiers:[]};
+  c = c ? JSON.parse(JSON.stringify(c)) : {id:uid('cl'), name:'', line1:'', city:'', state:'MI', zip:'', email:'', phone:'', contact:''};
   openModal(isNew?'New Client':'Edit Client', body=>{
     body.innerHTML = `
       <div class="grid g2">
@@ -479,76 +580,12 @@ function editClient(c){
         <div><label>Email</label><input id="c_email" value="${esc(c.email)}"></div>
         <div><label>Phone</label><input id="c_phone" value="${esc(c.phone)}"></div>
       </div>
-      <fieldset class="fieldset" style="margin-top:16px">
-        <legend>Discount rules</legend>
-        <div class="grid g2">
-          <div><label>Discount type</label>
-            <select id="d_type">
-              <option value="none">None</option>
-              <option value="flat">Flat (single %)</option>
-              <option value="tiered">Tiered (by payment date)</option>
-            </select></div>
-          <div><label>Applies to</label>
-            <select id="d_applies">
-              <option value="hourly">Hourly fees only</option>
-              <option value="all">All fees (hourly + fixed)</option>
-            </select></div>
-        </div>
-        <div id="tiersWrap" style="margin-top:10px"></div>
-        <div><label>“Paid in full” / discount note (prints on invoice)</label>
-          <textarea id="d_note">${esc(c.discount.note||'')}</textarea></div>
-      </fieldset>`;
-    $('#d_type',body).value=c.discount.type; $('#d_applies',body).value=c.discount.appliesTo;
-    function renderTiers(){
-      const type=$('#d_type',body).value;
-      const wrap=$('#tiersWrap',body);
-      if(type==='none'){ wrap.innerHTML=`<div class="small muted">This client receives no discount.</div>`; return; }
-      if(type==='flat'){
-        if(!c.discount.tiers[0]) c.discount.tiers[0]={id:uid('t'),label:'Discount',percent:10,cond:'always',days:0};
-        c.discount.tiers = [c.discount.tiers[0]];
-        wrap.innerHTML=`<div class="row"><div style="max-width:160px"><label>Percent off</label>
-          <input type="number" id="flat_pct" value="${c.discount.tiers[0].percent}" min="0" max="100" step="0.5"></div>
-          <div class="small muted">Applied to every invoice automatically.</div></div>`;
-        $('#flat_pct',body).oninput=e=>c.discount.tiers[0].percent=Number(e.target.value)||0;
-        return;
-      }
-      // tiered
-      wrap.innerHTML = `<div id="tierList"></div>
-        <button class="btn sec sm" id="addTier" type="button">＋ Add tier</button>`;
-      drawTierList();
-      $('#addTier',body).onclick=()=>{ c.discount.tiers.push({id:uid('t'),label:'',percent:10,cond:'days',days:10}); drawTierList(); };
-      function drawTierList(){
-        const tl=$('#tierList',body);
-        tl.innerHTML = c.discount.tiers.map((t,i)=>`
-          <div class="tier-row" data-i="${i}">
-            <input placeholder="Label (e.g. Early payment)" class="t_label" value="${esc(t.label)}">
-            <input type="number" class="t_pct" value="${t.percent}" min="0" max="100" step="0.5" title="Percent">
-            <select class="t_cond">
-              <option value="days"${t.cond==='days'?' selected':''}>within N days of invoice</option>
-              <option value="eom"${t.cond==='eom'?' selected':''}>by end of invoice month</option>
-            </select>
-            <input type="number" class="t_days" value="${t.days||0}" min="0" step="1" title="Days" style="${t.cond==='days'?'':'visibility:hidden'}">
-            <button class="btn ghost sm t_del" type="button" title="Remove">✕</button>
-          </div>`).join('') || `<div class="small muted">No tiers.</div>`;
-        tl.querySelectorAll('.tier-row').forEach(r=>{
-          const i=+r.dataset.i, t=c.discount.tiers[i];
-          r.querySelector('.t_label').oninput=e=>t.label=e.target.value;
-          r.querySelector('.t_pct').oninput=e=>t.percent=Number(e.target.value)||0;
-          r.querySelector('.t_days').oninput=e=>t.days=Number(e.target.value)||0;
-          r.querySelector('.t_cond').onchange=e=>{ t.cond=e.target.value; drawTierList(); };
-          r.querySelector('.t_del').onclick=()=>{ c.discount.tiers.splice(i,1); drawTierList(); };
-        });
-      }
-    }
-    renderTiers();
-    $('#d_type',body).onchange=renderTiers;
+      <div class="small muted" style="margin-top:10px">Discounts are configured per matter — set them when you add or edit a matter.</div>`;
   }, ()=>{
     const g=id=>$('#'+id).value.trim();
     c.name=g('c_name'); if(!c.name){ alert('Client name is required.'); return false; }
     c.contact=g('c_contact'); c.line1=g('c_line1'); c.city=g('c_city'); c.state=g('c_state'); c.zip=g('c_zip');
     c.email=g('c_email'); c.phone=g('c_phone');
-    c.discount.type=$('#d_type').value; c.discount.appliesTo=$('#d_applies').value; c.discount.note=$('#d_note').value;
-    if(c.discount.type==='none') c.discount.tiers=[];
     const ex=DB.clients.find(x=>x.id===c.id);
     if(ex) Object.assign(ex,c); else DB.clients.push(c);
     save(); render(); return true;
@@ -557,7 +594,8 @@ function editClient(c){
 
 function editMatter(m, clientId){
   const isNew=!m;
-  m = m ? {...m} : {id:uid('mt'), clientId, name:'', number:'', responsible:'', rate:(clientDefaultRate(clientId)), status:'open', description:''};
+  m = m ? JSON.parse(JSON.stringify(m)) : {id:uid('mt'), clientId, name:'', number:'', responsible:'', rate:(clientDefaultRate(clientId)), status:'open', description:'', discount:{type:'none',appliesTo:'hourly',note:'',tiers:[]}};
+  if(!m.discount) m.discount={type:'none',appliesTo:'hourly',note:'',tiers:[]};
   openModal(isNew?'New Matter':'Edit Matter', body=>{
     body.innerHTML=`
       <div class="grid g2">
@@ -569,11 +607,13 @@ function editMatter(m, clientId){
         <div><label>Status</label><select id="m_status"><option value="open"${m.status==='open'?' selected':''}>Open</option><option value="closed"${m.status==='closed'?' selected':''}>Closed</option></select></div>
         <div style="grid-column:1/-1"><label>Description (optional)</label><textarea id="m_desc">${esc(m.description)}</textarea></div>
       </div>`;
+    renderDiscountFieldset(body, m);
   }, ()=>{
     m.clientId=$('#m_client').value; m.number=$('#m_number').value.trim(); m.name=$('#m_name').value.trim();
     if(!m.name){ alert('Matter name required.'); return false; }
     m.rate=Number($('#m_rate').value)||0; m.responsible=$('#m_resp').value.trim();
     m.status=$('#m_status').value; m.description=$('#m_desc').value.trim();
+    commitDiscountFieldset(m);
     const ex=DB.matters.find(x=>x.id===m.id);
     if(ex) Object.assign(ex,m); else DB.matters.push(m);
     save(); render(); return true;
@@ -862,17 +902,24 @@ function newInvoiceFlow(){
 }
 
 function createInvoice(sel){
-  const client=clientById(sel.clientId);
   const entryIds=[...sel.entryIds];
   const mids=[...new Set(entryIds.map(id=>DB.entries.find(e=>e.id===id).matterId))];
   const number = DB.firm.invoicePrefix + (DB.firm.nextInvoiceNo++);
+  // Snapshot each matter's discount config + a per-matter override.
+  const matterDiscounts={};
+  mids.forEach(mid=>{
+    const m=matterById(mid);
+    matterDiscounts[mid]={
+      snapshot: (m && m.discount) ? JSON.parse(JSON.stringify(m.discount)) : {type:'none',appliesTo:'hourly',note:'',tiers:[]},
+      override:{mode:'auto', tierId:'', customPct:0, keepAvailable:false}
+    };
+  });
   const inv={
     id:uid('inv'), number, clientId:sel.clientId, matterIds:mids,
     matterNames:mids.map(id=>matterById(id)?.name).filter(Boolean).join(', '),
     date:sel.date, dueDate:addDays(sel.date,30),
     entryIds,
-    discountSnapshot: JSON.parse(JSON.stringify(client.discount||{type:'none'})),
-    discountOverride:{mode:'auto', tierId:'', customPct:0, keepAvailable:false}, // auto | none | tier | custom
+    matterDiscounts,
     status:'open', createdAt:todayISO()
   };
   computeInvoiceTotals(inv);
@@ -893,54 +940,67 @@ function computeInvoiceTotals(inv){
   inv.discountAmount=b.discountApplied; inv.grandTotal=b.grandTotal;
 }
 
-/* full breakdown incl. discount options */
-function invoiceBreakdown(inv){
-  const entries = inv.entryIds.map(id=>DB.entries.find(e=>e.id===id)).filter(Boolean);
-  const hourly = entries.filter(e=>e.type==='hourly');
-  const fixed  = entries.filter(e=>e.type==='fixed');
-  const expense= entries.filter(e=>e.type==='expense');
-  const hourlyCharged = round2(hourly.filter(e=>!e.noCharge).reduce((s,e)=>s+entryAmount(e),0));
-  const fixedTotal = round2(fixed.reduce((s,e)=>s+entryAmount(e),0));
-  const expenseTotal = round2(expense.reduce((s,e)=>s+entryAmount(e),0));
-
-  const d=inv.discountSnapshot||{type:'none'};
-  const base = (d.appliesTo==='all') ? (hourlyCharged+fixedTotal) : hourlyCharged;
-
-  // Build available discount options (tiers) with deadlines
+/* Compute discount options + effective discount for one discount config + override. */
+function computeDiscount(d, override, base, invDate){
+  d = d||{type:'none'};
   let options=[];
   if(d.type==='flat' && d.tiers?.[0]){
     options.push({id:d.tiers[0].id, label:d.tiers[0].label||'Discount', percent:d.tiers[0].percent, deadline:null, condText:'Applied to this invoice'});
   }else if(d.type==='tiered'){
-    options = (d.tiers||[]).map(t=>{
+    options=(d.tiers||[]).map(t=>{
       let deadline=null, condText='';
-      if(t.cond==='days'){ deadline=addDays(inv.date, t.days||0); condText=`if paid in full within ${t.days} day(s) — by ${fmtDate(deadline)}`; }
-      else if(t.cond==='eom'){ deadline=endOfMonth(inv.date); condText=`if paid in full by end of invoice month — by ${fmtDate(deadline)}`; }
+      if(t.cond==='days'){ deadline=addDays(invDate, t.days||0); condText=`if paid in full within ${t.days} day(s) — by ${fmtDate(deadline)}`; }
+      else if(t.cond==='eom'){ deadline=endOfMonth(invDate); condText=`if paid in full by end of invoice month — by ${fmtDate(deadline)}`; }
       return {id:t.id, label:t.label||'Discount', percent:t.percent, deadline, condText};
     });
   }
   options.forEach(o=>o.amount=round2(base*o.percent/100));
-
-  // Determine effective discount from override
-  const ov=inv.discountOverride||{mode:'auto'};
-  let effPercent=0, effLabel='', effAmount=0, effId='';
+  const ov=override||{mode:'auto'};
+  let effPercent=0, effLabel='', effId='';
   if(ov.mode==='custom'){ effPercent=Number(ov.customPct)||0; effLabel='Discount (manual override)'; effId='custom'; }
   else if(ov.mode==='none'){ effPercent=0; }
   else if(ov.mode==='tier'){ const o=options.find(x=>x.id===ov.tierId); if(o){ effPercent=o.percent; effLabel=o.label; effId=o.id; } }
-  else { // auto = best tier still available as of today (unless keepAvailable overrides expiry)
+  else {
     const today=todayISO();
-    const avail = options.filter(o=>!o.deadline || o.deadline>=today || ov.keepAvailable);
+    const avail=options.filter(o=>!o.deadline || o.deadline>=today || ov.keepAvailable);
     if(avail.length){ const best=avail.reduce((a,b)=>b.percent>a.percent?b:a); effPercent=best.percent; effLabel=best.label; effId=best.id; }
   }
-  effAmount = round2(base*effPercent/100);
+  return {options, effAmount:round2(base*effPercent/100), effPercent, effLabel, effId};
+}
 
-  const grandTotal = round2(hourlyCharged - (d.appliesTo==='all'?0:effAmount) + fixedTotal - (d.appliesTo==='all'?effAmount:0) + expenseTotal + (inv.priorBalance||0));
-  // simpler: subtotal minus discount
+/* full breakdown incl. per-matter discounts */
+function invoiceBreakdown(inv){
+  const entries = inv.entryIds.map(id=>DB.entries.find(e=>e.id===id)).filter(Boolean);
+  const mids = (inv.matterIds && inv.matterIds.length) ? inv.matterIds : [...new Set(entries.map(e=>e.matterId))];
+  const md = inv.matterDiscounts||{};
+  const matters = mids.map(mid=>{
+    const es=entries.filter(e=>e.matterId===mid);
+    const hourly=es.filter(e=>e.type==='hourly');
+    const fixed=es.filter(e=>e.type==='fixed');
+    const expense=es.filter(e=>e.type==='expense');
+    const hourlyCharged=round2(hourly.filter(e=>!e.noCharge).reduce((s,e)=>s+entryAmount(e),0));
+    const fixedTotal=round2(fixed.reduce((s,e)=>s+entryAmount(e),0));
+    const expenseTotal=round2(expense.reduce((s,e)=>s+entryAmount(e),0));
+    const conf = md[mid] || {snapshot:{type:'none',appliesTo:'hourly',note:'',tiers:[]}, override:{mode:'auto'}};
+    const d = conf.snapshot||{type:'none'};
+    const base = (d.appliesTo==='all') ? (hourlyCharged+fixedTotal) : hourlyCharged;
+    const disc = computeDiscount(d, conf.override, base, inv.date);
+    return {mid, m:matterById(mid), entries:es, hourly, fixed, expense,
+      hourlyCharged, fixedTotal, expenseTotal, subtotal:round2(hourlyCharged+fixedTotal+expenseTotal),
+      d, override:conf.override||{mode:'auto'}, base,
+      options:disc.options, discountApplied:disc.effAmount, discountPercent:disc.effPercent, discountLabel:disc.effLabel, discountId:disc.effId};
+  });
+  const hourly = entries.filter(e=>e.type==='hourly');
+  const fixed  = entries.filter(e=>e.type==='fixed');
+  const expense= entries.filter(e=>e.type==='expense');
+  const hourlyCharged = round2(matters.reduce((s,x)=>s+x.hourlyCharged,0));
+  const fixedTotal = round2(matters.reduce((s,x)=>s+x.fixedTotal,0));
+  const expenseTotal = round2(matters.reduce((s,x)=>s+x.expenseTotal,0));
   const subtotal = round2(hourlyCharged + fixedTotal + expenseTotal);
-  const grand = round2(subtotal - effAmount + (inv.priorBalance||0));
-
-  return {entries, hourly, fixed, expense, hourlyCharged, fixedTotal, expenseTotal,
-    subtotal, options, base, discountApplied:effAmount, discountPercent:effPercent,
-    discountLabel:effLabel, discountId:effId, grandTotal:grand};
+  const discountApplied = round2(matters.reduce((s,x)=>s+x.discountApplied,0));
+  const grand = round2(subtotal - discountApplied);
+  return {entries, matters, hourly, fixed, expense, hourlyCharged, fixedTotal, expenseTotal,
+    subtotal, discountApplied, grandTotal:grand};
 }
 
 /* ---- payments ---- */
@@ -1205,18 +1265,24 @@ function invFeeSections(entries){
   return {html:hourlySection+fixedSection+expenseSection, subtotal:round2(hc+ft+et)};
 }
 
-/* Build the line-item body: grouped by matter when the invoice spans several. */
+/* Build the line-item body: grouped by matter (with per-matter discount) when the invoice spans several. */
 function invItemsHtml(inv, b){
-  if((inv.matterIds||[]).length > 1){
-    return inv.matterIds.map(mid=>{
-      const es=b.entries.filter(e=>e.matterId===mid);
-      if(!es.length) return '';
-      const m=matterById(mid);
-      const fs=invFeeSections(es);
+  if(b.matters.length > 1){
+    return b.matters.filter(mt=>mt.entries.length).map(mt=>{
+      const m=mt.m;
+      const fs=invFeeSections(mt.entries);
+      const net=round2(mt.subtotal - mt.discountApplied);
+      const discRows = mt.discountApplied>0.005
+        ? `<div class="r disc"><span>Less discount (${num(mt.discountPercent)}%)</span><span>-${money(mt.discountApplied)}</span></div>
+           <div class="r tot"><span>Matter total — ${esc(m?m.name:'')}</span><span>${money(net)}</span></div>`
+        : '';
       return `<div class="matter-grp">
         <div class="matter-hd">${esc(m?m.name:'Matter')}${m&&m.number?`<span class="mnum">File No. ${esc(m.number)}</span>`:''}</div>
         ${fs.html}
-        <div class="matter-sub"><span>Matter subtotal — ${esc(m?m.name:'')}</span><span>${money(fs.subtotal)}</span></div>
+        <div class="matter-sub">
+          <div class="r"><span>Matter subtotal — ${esc(m?m.name:'')}</span><span>${money(mt.subtotal)}</span></div>
+          ${discRows}
+        </div>
       </div>`;
     }).join('');
   }
@@ -1239,6 +1305,10 @@ function openInvoiceDoc(invId){
   const priorInvoices = inv.priorSnapshot || [];
   const prevBalance = round2(inv.prevBalance||0);
   const totalOwed = round2(prevBalance + bal);
+
+  // Discount line label: a single % when one matter is discounted, else a plain "Discounts".
+  const discMatters = b.matters.filter(m=>m.discountApplied>0.005);
+  const discTotalLabel = discMatters.length===1 ? `Discount (${num(discMatters[0].discountPercent)}%)` : 'Less: Discounts';
 
   const trustBal = trustBalance(inv.clientId);
   const statusChip = inv.status==='void' ? `<span style="color:var(--stone)">VOID</span>`
@@ -1318,7 +1388,7 @@ function openInvoiceDoc(invId){
 
       <table class="totals">
         <tr><td>Subtotal (fees &amp; costs)</td><td>${money(b.subtotal)}</td></tr>
-        ${b.discountApplied>0?`<tr class="disc"><td>Discount (${num(b.discountPercent)}%)</td><td>-${money(b.discountApplied)}</td></tr>`:''}
+        ${b.discountApplied>0?`<tr class="disc"><td>${esc(discTotalLabel)}</td><td>-${money(b.discountApplied)}</td></tr>`:''}
         <tr class="rule"><td>Current Charges</td><td>${money(b.grandTotal)}</td></tr>
         ${paid>0?`<tr><td>Payments &amp; credits applied to this invoice</td><td>-${money(paid)}</td></tr>
         <tr><td>Balance, this invoice</td><td>${money(bal)}</td></tr>`:''}
@@ -1361,39 +1431,51 @@ function openInvoiceDoc(invId){
 
 function discountControls(){ return ''; }
 function discountNotice(inv,b){
-  if(!b.options.length) return '';
-  const rows=b.options.map(o=>{
-    const net=round2(b.subtotal - o.amount);
-    return `<tr><td>${esc(o.label)}</td><td>${esc(o.condText)}</td><td class="num">${num(o.percent)}%</td><td class="num">-${money(o.amount)}</td><td class="num"><b>${money(net)}</b></td></tr>`;
+  const withOpts=b.matters.filter(mt=>mt.options && mt.options.length);
+  if(!withOpts.length) return '';
+  const multi=b.matters.length>1;
+  return withOpts.map(mt=>{
+    const d=mt.d;
+    const rows=mt.options.map(o=>{
+      const net=round2(mt.subtotal - o.amount);
+      return `<tr><td>${esc(o.label)}</td><td>${esc(o.condText)}</td><td class="num">${num(o.percent)}%</td><td class="num">-${money(o.amount)}</td><td class="num"><b>${money(net)}</b></td></tr>`;
+    }).join('');
+    return `<div class="note">
+      <b>Discount${multi&&mt.m?` — ${esc(mt.m.name)}`:''}.</b> ${d.appliesTo==='all'?'Applies to hourly and fixed fees.':'Applies to hourly fees only.'}
+      ${d.note?`<div style="margin:4px 0">${esc(d.note)}</div>`:''}
+      <table style="margin-top:6px"><tr><th>Discount</th><th>Condition</th><th class="num">Rate</th><th class="num">Savings</th><th class="num">Net ${multi?'matter':'current'} charges</th></tr>${rows}</table>
+      ${mt.override?.keepAvailable?`<div style="margin-top:6px"><i>Discount eligibility extended by the firm; the above remains available notwithstanding the stated deadline.</i></div>`:''}
+    </div>`;
   }).join('');
-  const d=inv.discountSnapshot;
-  return `<div class="note">
-    <b>Discount.</b> ${d.appliesTo==='all'?'Applies to hourly and fixed fees.':'Applies to hourly fees only.'}
-    ${d.note?`<div style="margin:4px 0">${esc(d.note)}</div>`:''}
-    <table style="margin-top:6px"><tr><th>Discount</th><th>Condition</th><th class="num">Rate</th><th class="num">Savings</th><th class="num">Net current charges</th></tr>${rows}</table>
-    ${inv.discountOverride?.keepAvailable?`<div style="margin-top:6px"><i>Discount eligibility extended by the firm; the above remains available notwithstanding the stated deadline.</i></div>`:''}
-  </div>`;
 }
 
 function editDiscount(inv){
   const b=invoiceBreakdown(inv);
-  const ov=inv.discountOverride||(inv.discountOverride={mode:'auto',tierId:'',customPct:0,keepAvailable:false});
+  const withDisc=b.matters.filter(mt=>mt.d && mt.d.type!=='none');
   openModal('Discount — '+inv.number, body=>{
-    body.innerHTML=`
-      <div class="small muted" style="margin-bottom:10px">Choose how the discount is applied to the invoice total. “Automatic” selects the best tier that is still within its deadline as of today (${fmtDate(todayISO())}).</div>
-      <label class="chk" style="margin:6px 0"><input type="radio" name="ovm" value="auto" ${ov.mode==='auto'?'checked':''}> Automatic (deadline-based)</label>
-      <label class="chk" style="margin:6px 0"><input type="radio" name="ovm" value="none" ${ov.mode==='none'?'checked':''}> No discount applied to total</label>
-      ${b.options.map(o=>`<label class="chk" style="margin:6px 0"><input type="radio" name="ovm" value="tier:${o.id}" ${ov.mode==='tier'&&ov.tierId===o.id?'checked':''}> Force apply: ${esc(o.label)} (${num(o.percent)}% = -${money(o.amount)})</label>`).join('')}
-      <label class="chk" style="margin:6px 0"><input type="radio" name="ovm" value="custom" ${ov.mode==='custom'?'checked':''}> Custom override %: <input type="number" id="ov_pct" value="${ov.customPct||0}" step="0.5" style="width:90px;margin-left:6px"></label>
-      <hr class="hr">
-      <label class="chk"><input type="checkbox" id="ov_keep" ${ov.keepAvailable?'checked':''}> <b>Extend eligibility</b> — keep discounts available even after their deadline passes (overrides automatic removal when we extend the offer)</label>`;
+    if(!withDisc.length){ body.innerHTML=`<div class="small muted">No matter on this invoice has a discount configured. Set a matter's discount rules under Clients &amp; Matters.</div>`; return; }
+    body.innerHTML=`<div class="small muted" style="margin-bottom:10px">Choose how each matter's discount applies to this invoice. “Automatic” selects the best tier still within its deadline as of today (${fmtDate(todayISO())}).</div>`+
+      withDisc.map((mt,idx)=>{
+        const ov=(inv.matterDiscounts[mt.mid]&&inv.matterDiscounts[mt.mid].override)||{mode:'auto'};
+        return `<fieldset class="fieldset" style="margin-bottom:12px"><legend>${esc(mt.m?mt.m.name:'Matter')}</legend>
+          <label class="chk" style="margin:5px 0"><input type="radio" name="ovm_${idx}" value="auto" ${ov.mode==='auto'?'checked':''}> Automatic (deadline-based)</label>
+          <label class="chk" style="margin:5px 0"><input type="radio" name="ovm_${idx}" value="none" ${ov.mode==='none'?'checked':''}> No discount applied</label>
+          ${mt.options.map(o=>`<label class="chk" style="margin:5px 0"><input type="radio" name="ovm_${idx}" value="tier:${o.id}" ${ov.mode==='tier'&&ov.tierId===o.id?'checked':''}> Force apply: ${esc(o.label)} (${num(o.percent)}% = -${money(o.amount)})</label>`).join('')}
+          <label class="chk" style="margin:5px 0"><input type="radio" name="ovm_${idx}" value="custom" ${ov.mode==='custom'?'checked':''}> Custom override %: <input type="number" id="ovpct_${idx}" value="${ov.customPct||0}" step="0.5" style="width:80px;margin-left:6px"></label>
+          <label class="chk" style="margin-top:6px"><input type="checkbox" id="ovkeep_${idx}" ${ov.keepAvailable?'checked':''}> Extend eligibility past deadline</label>
+        </fieldset>`;
+      }).join('');
   }, ()=>{
-    const v=document.querySelector('input[name="ovm"]:checked')?.value||'auto';
-    if(v==='auto'){ ov.mode='auto'; ov.tierId=''; }
-    else if(v==='none'){ ov.mode='none'; ov.tierId=''; }
-    else if(v==='custom'){ ov.mode='custom'; ov.customPct=Number($('#ov_pct').value)||0; }
-    else if(v.startsWith('tier:')){ ov.mode='tier'; ov.tierId=v.slice(5); }
-    ov.keepAvailable=$('#ov_keep').checked;
+    withDisc.forEach((mt,idx)=>{
+      if(!inv.matterDiscounts[mt.mid]) inv.matterDiscounts[mt.mid]={snapshot:mt.d, override:{}};
+      const ov=inv.matterDiscounts[mt.mid].override||(inv.matterDiscounts[mt.mid].override={});
+      const v=document.querySelector(`input[name="ovm_${idx}"]:checked`)?.value||'auto';
+      if(v==='auto'){ ov.mode='auto'; ov.tierId=''; }
+      else if(v==='none'){ ov.mode='none'; ov.tierId=''; }
+      else if(v==='custom'){ ov.mode='custom'; ov.customPct=Number(document.getElementById('ovpct_'+idx).value)||0; }
+      else if(v.startsWith('tier:')){ ov.mode='tier'; ov.tierId=v.slice(5); }
+      ov.keepAvailable=document.getElementById('ovkeep_'+idx).checked;
+    });
     computeInvoiceTotals(inv); save(); openInvoiceDoc(inv.id); return true;
   });
 }
