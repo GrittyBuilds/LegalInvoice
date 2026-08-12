@@ -158,6 +158,13 @@
   .doc .subtot td{border-top:1px solid var(--gold); border-bottom:none; padding-top:7px; font-weight:600; color:var(--ink);}
   .doc .nc{color:var(--nc); font-style:italic;}
   .doc .muted{color:var(--stone);}
+  /* Per-matter grouping */
+  .doc .matter-hd{margin:22px 0 0; padding:7px 10px; background:var(--forest); color:#fff; font-weight:600;
+    font-size:11.5px; letter-spacing:.03em; border-radius:5px 5px 0 0;}
+  .doc .matter-hd .mnum{color:var(--gold); font-weight:500; font-size:10px; margin-left:8px;}
+  .doc .matter-sub{display:flex; justify-content:space-between; padding:7px 10px; margin-bottom:4px;
+    background:var(--paper); border:1px solid #e6e3d9; border-top:none; border-radius:0 0 5px 5px; font-weight:600; font-size:11px; color:var(--ink);}
+  .doc .matter-grp table:first-of-type{margin-top:0 !important;}
 
   /* Totals block */
   .doc .totals{width:290px; margin-left:auto; margin-top:14px;}
@@ -212,7 +219,7 @@
 /* =========================================================================
    Legal Billing & Trust Manager  —  single-file, local (localStorage) app
    Built for Michigan legal practice: itemized fees, trust/IOLTA (MRPC 1.15),
-   reasonable-fee itemization (MRPC 1.5), tiered prompt-payment discounts.
+   reasonable-fee itemization (MRPC 1.5), tiered discounts.
    ========================================================================= */
 
 /* ---------- storage ---------- */
@@ -479,7 +486,7 @@ function editClient(c){
             <select id="d_type">
               <option value="none">None</option>
               <option value="flat">Flat (single %)</option>
-              <option value="tiered">Tiered (prompt-payment)</option>
+              <option value="tiered">Tiered (by payment date)</option>
             </select></div>
           <div><label>Applies to</label>
             <select id="d_applies">
@@ -772,7 +779,8 @@ function openInvoicesFor(clientId){
 /* ---- New-invoice flow: pick client + matters, select unbilled entries ---- */
 function newInvoiceFlow(){
   if(!DB.clients.length){ alert('Create a client first.'); return; }
-  let sel = {clientId:DB.clients[0].id, matterIds:new Set(), entryIds:new Set(), date:todayISO()};
+  // Default: include ALL of the client's matters on one invoice.
+  let sel = {clientId:DB.clients[0].id, matterIds:new Set(mattersFor(DB.clients[0].id).map(m=>m.id)), entryIds:new Set(), date:todayISO()};
   openModal('New Invoice — select work', body=>{
     body.innerHTML=`
       <div class="grid g2">
@@ -780,12 +788,13 @@ function newInvoiceFlow(){
         <div><label>Invoice date</label><input type="date" id="i_date" value="${sel.date}"></div>
       </div>
       <div class="subhead">Matters to include</div>
+      <div class="small muted" style="margin-bottom:6px">All of the client’s matters are included on one invoice by default — uncheck any you want to leave off.</div>
       <div id="matterPick"></div>
       <div class="subhead">Unbilled entries</div>
       <div class="small muted" style="margin-bottom:6px">Only unbilled entries for the selected matter(s) are shown. No-charge items may be included; they print but don’t add to the total.</div>
       <div id="entryPick"></div>`;
     const cS=$('#i_client',body); cS.value=sel.clientId;
-    cS.onchange=()=>{ sel.clientId=cS.value; sel.matterIds=new Set(); sel.entryIds=new Set(); drawMatters(); drawEntries(); };
+    cS.onchange=()=>{ sel.clientId=cS.value; sel.matterIds=new Set(mattersFor(cS.value).map(m=>m.id)); sel.entryIds=new Set(); sel._touched=false; drawMatters(); drawEntries(); };
     $('#i_date',body).onchange=e=>sel.date=e.target.value;
     function drawMatters(){
       const ms=mattersFor(sel.clientId);
@@ -1116,6 +1125,72 @@ function partyBlock(c){
     ${c.email?`<div class="muted">${esc(c.email)}</div>`:''}</div>`;
 }
 
+/* Render the three fee-type section tables from an arbitrary set of entries. */
+function invFeeSections(entries){
+  const hourly=entries.filter(e=>e.type==='hourly');
+  const fixed=entries.filter(e=>e.type==='fixed');
+  const expense=entries.filter(e=>e.type==='expense');
+  const hc=round2(hourly.filter(e=>!e.noCharge).reduce((s,e)=>s+entryAmount(e),0));
+  const ft=round2(fixed.reduce((s,e)=>s+entryAmount(e),0));
+  const et=round2(expense.reduce((s,e)=>s+entryAmount(e),0));
+  const hourlySection = hourly.length ? `
+    <table style="margin-top:16px">
+      <thead>
+        <tr class="sec-title"><td colspan="6">Professional Services — Hourly Fees</td></tr>
+        <tr><th style="width:66px">Date</th><th style="width:38px">Atty</th><th>Description</th><th class="num" style="width:46px">Hours</th><th class="num" style="width:66px">Rate</th><th class="num" style="width:78px">Amount</th></tr>
+      </thead>
+      <tbody>
+        ${hourly.map(e=>`<tr>
+          <td class="nowrap">${fmtDate(e.date)}</td><td>${esc(tkById(e.tkId)?.initials||'')}</td>
+          <td>${esc(e.desc)}${e.noCharge?`<div class="nc">No Charge — ${esc(e.ncNote||'')}</div>`:''}</td>
+          <td class="num">${num(e.hours)}</td><td class="num">${money(e.rate)}</td>
+          <td class="num">${e.noCharge?`<span class="nc">N/C</span>`:money(entryAmount(e))}</td></tr>`).join('')}
+        <tr class="subtot"><td colspan="5" class="num">Total Hourly Fees</td><td class="num">${money(hc)}</td></tr>
+      </tbody>
+    </table>` : '';
+  const fixedSection = fixed.length ? `
+    <table style="margin-top:16px">
+      <thead>
+        <tr class="sec-title"><td colspan="3">Fixed Fees</td></tr>
+        <tr><th style="width:66px">Date</th><th>Description</th><th class="num" style="width:78px">Amount</th></tr>
+      </thead>
+      <tbody>
+        ${fixed.map(e=>`<tr><td class="nowrap">${fmtDate(e.date)}</td><td>${esc(e.desc)}</td><td class="num">${money(entryAmount(e))}</td></tr>`).join('')}
+        <tr class="subtot"><td colspan="2" class="num">Total Fixed Fees</td><td class="num">${money(ft)}</td></tr>
+      </tbody>
+    </table>` : '';
+  const expenseSection = expense.length ? `
+    <table style="margin-top:16px">
+      <thead>
+        <tr class="sec-title"><td colspan="3">Out-of-Pocket Expenses (Costs Advanced)</td></tr>
+        <tr><th style="width:66px">Date</th><th>Description</th><th class="num" style="width:78px">Amount</th></tr>
+      </thead>
+      <tbody>
+        ${expense.map(e=>`<tr><td class="nowrap">${fmtDate(e.date)}</td><td>${esc(e.desc)}</td><td class="num">${money(entryAmount(e))}</td></tr>`).join('')}
+        <tr class="subtot"><td colspan="2" class="num">Total Expenses</td><td class="num">${money(et)}</td></tr>
+      </tbody>
+    </table>` : '';
+  return {html:hourlySection+fixedSection+expenseSection, subtotal:round2(hc+ft+et)};
+}
+
+/* Build the line-item body: grouped by matter when the invoice spans several. */
+function invItemsHtml(inv, b){
+  if((inv.matterIds||[]).length > 1){
+    return inv.matterIds.map(mid=>{
+      const es=b.entries.filter(e=>e.matterId===mid);
+      if(!es.length) return '';
+      const m=matterById(mid);
+      const fs=invFeeSections(es);
+      return `<div class="matter-grp">
+        <div class="matter-hd">${esc(m?m.name:'Matter')}${m&&m.number?`<span class="mnum">File No. ${esc(m.number)}</span>`:''}</div>
+        ${fs.html}
+        <div class="matter-sub"><span>Matter subtotal — ${esc(m?m.name:'')}</span><span>${money(fs.subtotal)}</span></div>
+      </div>`;
+    }).join('');
+  }
+  return invFeeSections(b.entries).html;
+}
+
 function openInvoiceDoc(invId){
   const inv=DB.invoices.find(i=>i.id===invId); if(!inv) return;
   computeInvoiceTotals(inv); save();
@@ -1123,48 +1198,18 @@ function openInvoiceDoc(invId){
   const b=invoiceBreakdown(inv);
   const paid=invoicePaid(inv), bal=invoiceBalance(inv);
 
+  // running balance owed = this invoice + all other outstanding invoices for the client
+  const priorInvoices = DB.invoices
+    .filter(i=>i.clientId===inv.clientId && i.id!==inv.id && i.status!=='void' && invoiceBalance(i)>0.005)
+    .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const prevBalance = round2(priorInvoices.reduce((s,i)=>s+invoiceBalance(i),0));
+  const totalOwed = round2(prevBalance + bal);
+
   const trustBal = trustBalance(inv.clientId);
   const statusChip = inv.status==='void' ? `<span style="color:var(--stone)">VOID</span>`
-    : bal<=0.005 ? `<span style="color:var(--emerald)">PAID IN FULL</span>` : '';
+    : totalOwed<=0.005 ? `<span style="color:var(--emerald)">PAID IN FULL</span>` : '';
 
-  // ---- line-item section tables ----
-  const hourlySection = b.hourly.length ? `
-    <table style="margin-top:16px">
-      <thead>
-        <tr class="sec-title"><td colspan="6">Professional Services — Hourly Fees</td></tr>
-        <tr><th style="width:66px">Date</th><th style="width:38px">Atty</th><th>Description</th><th class="num" style="width:46px">Hours</th><th class="num" style="width:66px">Rate</th><th class="num" style="width:78px">Amount</th></tr>
-      </thead>
-      <tbody>
-        ${b.hourly.map(e=>`<tr>
-          <td class="nowrap">${fmtDate(e.date)}</td><td>${esc(tkById(e.tkId)?.initials||'')}</td>
-          <td>${esc(e.desc)}${e.noCharge?`<div class="nc">No Charge — ${esc(e.ncNote||'')}</div>`:''}</td>
-          <td class="num">${num(e.hours)}</td><td class="num">${money(e.rate)}</td>
-          <td class="num">${e.noCharge?`<span class="nc">N/C</span>`:money(entryAmount(e))}</td></tr>`).join('')}
-        <tr class="subtot"><td colspan="5" class="num">Total Hourly Fees</td><td class="num">${money(b.hourlyCharged)}</td></tr>
-      </tbody>
-    </table>` : '';
-  const fixedSection = b.fixed.length ? `
-    <table style="margin-top:16px">
-      <thead>
-        <tr class="sec-title"><td colspan="3">Fixed Fees</td></tr>
-        <tr><th style="width:66px">Date</th><th>Description</th><th class="num" style="width:78px">Amount</th></tr>
-      </thead>
-      <tbody>
-        ${b.fixed.map(e=>`<tr><td class="nowrap">${fmtDate(e.date)}</td><td>${esc(e.desc)}</td><td class="num">${money(entryAmount(e))}</td></tr>`).join('')}
-        <tr class="subtot"><td colspan="2" class="num">Total Fixed Fees</td><td class="num">${money(b.fixedTotal)}</td></tr>
-      </tbody>
-    </table>` : '';
-  const expenseSection = b.expense.length ? `
-    <table style="margin-top:16px">
-      <thead>
-        <tr class="sec-title"><td colspan="3">Out-of-Pocket Expenses (Costs Advanced)</td></tr>
-        <tr><th style="width:66px">Date</th><th>Description</th><th class="num" style="width:78px">Amount</th></tr>
-      </thead>
-      <tbody>
-        ${b.expense.map(e=>`<tr><td class="nowrap">${fmtDate(e.date)}</td><td>${esc(e.desc)}</td><td class="num">${money(entryAmount(e))}</td></tr>`).join('')}
-        <tr class="subtot"><td colspan="2" class="num">Total Expenses</td><td class="num">${money(b.expenseTotal)}</td></tr>
-      </tbody>
-    </table>` : '';
+  const itemsHtml = invItemsHtml(inv, b);
 
   // ---- payments/credits applied to THIS invoice ----
   const appl = DB.payments.map(p=>({date:p.date, label:(p.method||'Payment')+(p.note?' · '+p.note:''), amt:paymentAppliedTo(p,inv.id)}))
@@ -1180,6 +1225,18 @@ function openInvoiceDoc(invId){
       <tbody>
         ${appl.map(a=>`<tr><td class="nowrap">${fmtDate(a.date)}</td><td>${esc(a.label)}</td><td class="num">-${money(a.amt)}</td></tr>`).join('')}
         <tr class="subtot"><td colspan="2" class="num">Total Applied</td><td class="num">-${money(paid)}</td></tr>
+      </tbody>
+    </table>` : '';
+
+  const priorSection = priorInvoices.length ? `
+    <table style="margin-top:16px">
+      <thead>
+        <tr class="sec-title"><td colspan="4">Previous Balance — Prior Outstanding Invoices</td></tr>
+        <tr><th style="width:90px">Invoice</th><th style="width:80px">Date</th><th>Matter(s)</th><th class="num" style="width:90px">Balance</th></tr>
+      </thead>
+      <tbody>
+        ${priorInvoices.map(i=>`<tr><td>${esc(i.number)}</td><td class="nowrap">${fmtDate(i.date)}</td><td>${esc(i.matterNames||'')}</td><td class="num">${money(invoiceBalance(i))}</td></tr>`).join('')}
+        <tr class="subtot"><td colspan="3" class="num">Previous Balance</td><td class="num">${money(prevBalance)}</td></tr>
       </tbody>
     </table>` : '';
 
@@ -1214,23 +1271,26 @@ function openInvoiceDoc(invId){
       </div>
 
       <div class="summary">
-        <div class="cell"><div class="lbl">Invoice Total</div><div class="amt">${money(b.grandTotal)}</div></div>
-        <div class="cell"><div class="lbl">Payments &amp; Credits</div><div class="amt">-${money(paid)}</div></div>
-        <div class="cell due"><div class="lbl">Balance Due</div><div class="amt">${money(bal)}</div></div>
+        <div class="cell"><div class="lbl">Current Charges</div><div class="amt">${money(b.grandTotal)}</div></div>
+        <div class="cell"><div class="lbl">Previous Balance</div><div class="amt">${money(prevBalance)}</div></div>
+        <div class="cell due"><div class="lbl">Total Balance Due</div><div class="amt">${money(totalOwed)}</div></div>
       </div>
 
-      ${hourlySection}${fixedSection}${expenseSection}
+      ${itemsHtml}
+
+      ${paymentsSection}
+      ${priorSection}
 
       <table class="totals">
         <tr><td>Subtotal (fees &amp; costs)</td><td>${money(b.subtotal)}</td></tr>
-        ${b.discountApplied>0?`<tr class="disc"><td>${esc(b.discountLabel||'Discount')} (${num(b.discountPercent)}%)</td><td>-${money(b.discountApplied)}</td></tr>`:''}
-        ${inv.priorBalance?`<tr><td>Prior balance</td><td>${money(inv.priorBalance)}</td></tr>`:''}
-        <tr class="grand"><td>Total Amount Due</td><td>${money(b.grandTotal)}</td></tr>
-        ${paid>0?`<tr class="rule"><td>Payments &amp; credits applied</td><td>-${money(paid)}</td></tr>
-        <tr class="bal"><td>Balance Due</td><td>${money(bal)}</td></tr>`:''}
+        ${b.discountApplied>0?`<tr class="disc"><td>Discount (${num(b.discountPercent)}%)</td><td>-${money(b.discountApplied)}</td></tr>`:''}
+        <tr class="rule"><td>Current Charges</td><td>${money(b.grandTotal)}</td></tr>
+        ${paid>0?`<tr><td>Payments &amp; credits applied to this invoice</td><td>-${money(paid)}</td></tr>
+        <tr><td>Balance, this invoice</td><td>${money(bal)}</td></tr>`:''}
+        ${prevBalance>0.005?`<tr><td>Previous balance (prior invoices)</td><td>${money(prevBalance)}</td></tr>`:''}
+        <tr class="grand"><td>Total Balance Due</td><td>${money(totalOwed)}</td></tr>
       </table>
 
-      ${paymentsSection}
       ${discountNotice(inv,b)}
       ${trustBal>0?`<div class="note">Client trust (IOLTA) balance available: <b>${money(trustBal)}</b>. ${esc(DB.firm.trustNotice)}</div>`:''}
       <div class="note"><b>Terms.</b> ${esc(DB.firm.terms)}</div>
@@ -1247,7 +1307,9 @@ function openInvoiceDoc(invId){
             <table class="metatable">
               <tr><td>Invoice No.</td><td>${esc(inv.number)}</td></tr>
               <tr><td>Client</td><td>${esc(c?.name||'')}</td></tr>
-              <tr><td>Balance Due</td><td><b>${money(bal)}</b></td></tr>
+              <tr><td>This Invoice Balance</td><td>${money(bal)}</td></tr>
+              ${prevBalance>0.005?`<tr><td>Previous Balance</td><td>${money(prevBalance)}</td></tr>`:''}
+              <tr><td>Total Balance Due</td><td><b>${money(totalOwed)}</b></td></tr>
               <tr><td>Amount Enclosed</td><td>$ __________</td></tr>
             </table>
           </div>
@@ -1266,14 +1328,14 @@ function discountControls(){ return ''; }
 function discountNotice(inv,b){
   if(!b.options.length) return '';
   const rows=b.options.map(o=>{
-    const net=round2(b.subtotal - o.amount + (inv.priorBalance||0));
+    const net=round2(b.subtotal - o.amount);
     return `<tr><td>${esc(o.label)}</td><td>${esc(o.condText)}</td><td class="num">${num(o.percent)}%</td><td class="num">-${money(o.amount)}</td><td class="num"><b>${money(net)}</b></td></tr>`;
   }).join('');
   const d=inv.discountSnapshot;
   return `<div class="note">
-    <b>Prompt-Payment Discount.</b> ${d.appliesTo==='all'?'Applies to hourly and fixed fees.':'Applies to hourly fees only.'}
+    <b>Discount.</b> ${d.appliesTo==='all'?'Applies to hourly and fixed fees.':'Applies to hourly fees only.'}
     ${d.note?`<div style="margin:4px 0">${esc(d.note)}</div>`:''}
-    <table style="margin-top:6px"><tr><th>Discount</th><th>Condition</th><th class="num">Rate</th><th class="num">Savings</th><th class="num">Net if applicable</th></tr>${rows}</table>
+    <table style="margin-top:6px"><tr><th>Discount</th><th>Condition</th><th class="num">Rate</th><th class="num">Savings</th><th class="num">Net current charges</th></tr>${rows}</table>
     ${inv.discountOverride?.keepAvailable?`<div style="margin-top:6px"><i>Discount eligibility extended by the firm; the above remains available notwithstanding the stated deadline.</i></div>`:''}
   </div>`;
 }

@@ -40,14 +40,19 @@ your data over.
 - **Fixed Fee** — flat-amount services.
 - **Out-of-Pocket Expenses** — costs advanced.
 
-**Invoices** — pick a client, one or more matters, and the unbilled entries to
-include. Printable (browser Print → *Save as PDF*), styled to the **CM Advisory
-Corp brand** (emerald/gold, Poppins, brand lockup masthead), with:
-- An **Invoice Total / Payments & Credits / Balance Due** summary band.
+**Invoices** — one invoice per client covering **all of that client's matters by
+default** (uncheck any to leave off). Printable (browser Print → *Save as PDF*),
+styled to the **CM Advisory Corp brand** (emerald/gold, Poppins, brand lockup
+masthead), with:
+- A **Current Charges / Previous Balance / Total Balance Due** summary band — every
+  invoice shows the client's full **running balance owed**, and itemizes the prior
+  outstanding invoices that make up the previous balance.
+- When a client has several matters, line items are **grouped by matter**, each with
+  its own Hourly/Fixed/Expense sub-sections and a matter subtotal.
 - Separate **Hourly Fees**, **Fixed Fees**, and **Expenses** sections + subtotals.
 - A **Payments & Credits Applied** section and a detachable **remittance stub**.
-- Prompt-payment discount schedule, prior balance, and balance due.
-- **Apply Trust** to draw the client's trust/IOLTA balance against the invoice.
+- Variable / tiered **discount** schedule (applied to hourly fees) with per-invoice
+  override, and **Apply Trust** to draw the client's trust/IOLTA balance.
 
 **Payments** — a dedicated section to **apply payments** to a client's account:
 - Record a payment (client, date, amount, method, reference) and **allocate it
