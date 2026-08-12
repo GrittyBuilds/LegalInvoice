@@ -41,10 +41,21 @@ your data over.
 - **Out-of-Pocket Expenses** — costs advanced.
 
 **Invoices** — pick a client, one or more matters, and the unbilled entries to
-include. Printable (browser Print → *Save as PDF*), with:
+include. Printable (browser Print → *Save as PDF*), styled to the **CM Advisory
+Corp brand** (emerald/gold, Poppins, brand lockup masthead), with:
+- An **Invoice Total / Payments & Credits / Balance Due** summary band.
 - Separate **Hourly Fees**, **Fixed Fees**, and **Expenses** sections + subtotals.
-- Prompt-payment discount schedule, prior balance, payments, and balance due.
+- A **Payments & Credits Applied** section and a detachable **remittance stub**.
+- Prompt-payment discount schedule, prior balance, and balance due.
 - **Apply Trust** to draw the client's trust/IOLTA balance against the invoice.
+
+**Payments** — a dedicated section to **apply payments** to a client's account:
+- Record a payment (client, date, amount, method, reference) and **allocate it
+  across one or more open invoices** — manually or *auto-apply to oldest*.
+- Any unallocated amount is held as an **unapplied credit** on the client's
+  account and can be applied to invoices later.
+- Payment history with applied/unapplied amounts; invoices and statements show
+  the payments applied to them.
 
 **Retainers &amp; Trust**
 - Printable **Retainer Requests**; mark one *funded* to auto-post a trust deposit.
