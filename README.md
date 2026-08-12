@@ -18,7 +18,9 @@ your data over.
 ## What it does
 
 **Clients &amp; Matters**
-- Multiple matters per client, each with its own file number and default rate.
+- Multiple matters per client, each with its own **auto-assigned file number** and
+  default rate. Clients and matters can be **deleted** when they have no financial
+  history (invoices/payments/trust).
 - **Per-matter discount profile**: **None**, **Flat %**, or **Tiered** — set on each
   matter. A single invoice spanning several matters applies each matter's own
   discount and aggregates them.
@@ -41,6 +43,8 @@ your data over.
     *No Charge* with a **customizable note**, and is excluded from the total.
 - **Fixed Fee** — flat-amount services.
 - **Out-of-Pocket Expenses** — costs advanced.
+- **Save &amp; New / Save &amp; Duplicate** for fast repeat entry, and **description
+  templates** (managed in Firm Settings) inserted from the entry form.
 
 **Invoices** — one invoice per client covering **all of that client's matters by
 default** (uncheck any to leave off). Printable (browser Print → *Save as PDF*),
@@ -57,6 +61,16 @@ masthead), with:
 - A **Payments & Credits Applied** section and a detachable **remittance stub**.
 - Variable / tiered **discount** schedule (applied to hourly fees) with per-invoice
   override, and **Apply Trust** to draw the client's trust/IOLTA balance.
+
+**Drafts & write-downs** — new invoices start as **drafts** (excluded from A/R).
+While a draft you can add/remove lines, **write down** individual lines to a lower
+billed amount, and apply an invoice-level adjustment; then **Finalize & Issue** to
+lock it and make it a receivable. Issued-but-unpaid invoices can be reopened as
+drafts. Printed drafts carry a “DRAFT — NOT YET ISSUED” banner.
+
+**Reports — A/R aging** — outstanding balances bucketed Current / 1–30 / 31–60 /
+61–90 / 90+ per client, with totals. Generate a **payment reminder** statement
+(past-due banner + aging summary) for any client with an overdue balance.
 
 **Payments** — a dedicated section to **apply payments** to a client's account:
 - Record a payment (client, date, amount, method, reference) and **allocate it
