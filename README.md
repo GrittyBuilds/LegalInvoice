@@ -68,9 +68,20 @@ billed amount, and apply an invoice-level adjustment; then **Finalize & Issue** 
 lock it and make it a receivable. Issued-but-unpaid invoices can be reopened as
 drafts. Printed drafts carry a “DRAFT — NOT YET ISSUED” banner.
 
-**Reports — A/R aging** — outstanding balances bucketed Current / 1–30 / 31–60 /
-61–90 / 90+ per client, with totals. Generate a **payment reminder** statement
-(past-due banner + aging summary) for any client with an overdue balance.
+**Reports** — **A/R aging** (Current / 1–30 / 31–60 / 61–90 / 90+ per client),
+**collections & revenue** for this month / year / all-time (billed, cash collected,
+credit memos, refunds; revenue by client), one-click **payment reminders**, and
+**CSV export** of invoices, payments, and time. **Finance charges** on past-due
+balances can be assessed here when enabled in Firm Settings.
+
+**Recurring & batch billing** — define fixed **monthly recurring charges** (Firm
+Settings) and post them each month with one action; **batch-invoice** every client
+with unbilled work into drafts in a single pass.
+
+**More billing controls** — configurable **payment terms** (Due on receipt / Net
+15/30/45/60, per client or firm default), an optional **sales tax** line, **expense
+markup**, **credit memos & refunds**, and an offer to **auto-apply available trust**
+when an invoice is issued.
 
 **Payments** — a dedicated section to **apply payments** to a client's account:
 - Record a payment (client, date, amount, method, reference) and **allocate it
