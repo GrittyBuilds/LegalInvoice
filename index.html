@@ -299,7 +299,7 @@ function migrate(db){
           snapshot: inv.discountSnapshot ? JSON.parse(JSON.stringify(inv.discountSnapshot))
             : {type:'none', appliesTo:'hourly', note:'', tiers:[]},
           override: inv.discountOverride ? JSON.parse(JSON.stringify(inv.discountOverride))
-            : {mode:'auto', tierId:'', customPct:0, keepAvailable:false}
+            : {mode:'auto', tierId:'', customAmt:0, keepAvailable:false}
         };
       });
     }
@@ -1051,7 +1051,7 @@ function createInvoice(sel, issue){
     const m=matterById(mid);
     matterDiscounts[mid]={
       snapshot: (m && m.discount) ? JSON.parse(JSON.stringify(m.discount)) : {type:'none',appliesTo:'hourly',note:'',tiers:[]},
-      override:{mode:'auto', tierId:'', customPct:0, keepAvailable:false}
+      override:{mode:'auto', tierId:'', customAmt:0, keepAvailable:false}
     };
   });
   const client=clientById(sel.clientId);
@@ -1119,7 +1119,7 @@ function createInvoiceSilent(sel){
   const mids=[...new Set(entryIds.map(id=>DB.entries.find(e=>e.id===id).matterId))];
   const number = DB.firm.invoicePrefix + (DB.firm.nextInvoiceNo++);
   const matterDiscounts={};
-  mids.forEach(mid=>{ const m=matterById(mid); matterDiscounts[mid]={snapshot:(m&&m.discount)?JSON.parse(JSON.stringify(m.discount)):{type:'none',appliesTo:'hourly',note:'',tiers:[]}, override:{mode:'auto',tierId:'',customPct:0,keepAvailable:false}}; });
+  mids.forEach(mid=>{ const m=matterById(mid); matterDiscounts[mid]={snapshot:(m&&m.discount)?JSON.parse(JSON.stringify(m.discount)):{type:'none',appliesTo:'hourly',note:'',tiers:[]}, override:{mode:'auto',tierId:'',customAmt:0,keepAvailable:false}}; });
   const client=clientById(sel.clientId);
   const taxRate=(client&&client.taxRate!=null)?Number(client.taxRate):Number(DB.firm.taxRate||0);
   const inv={id:uid('inv'), number, clientId:sel.clientId, matterIds:mids,
@@ -1193,16 +1193,21 @@ function computeDiscount(d, override, base, invDate){
   }
   options.forEach(o=>o.amount=round2(base*o.percent/100));
   const ov=override||{mode:'auto'};
-  let effPercent=0, effLabel='', effId='';
-  if(ov.mode==='custom'){ effPercent=Number(ov.customPct)||0; effLabel='Discount (manual override)'; effId='custom'; }
-  else if(ov.mode==='none'){ effPercent=0; }
-  else if(ov.mode==='tier'){ const o=options.find(x=>x.id===ov.tierId); if(o){ effPercent=o.percent; effLabel=o.label; effId=o.id; } }
+  let effPercent=0, effLabel='', effId='', effAmount=0;
+  if(ov.mode==='custom'){
+    // Custom override is a flat dollar amount, capped at the discountable base.
+    effAmount = round2(Math.max(0, Math.min(Number(ov.customAmt)||0, base)));
+    effPercent = base>0 ? round2(effAmount/base*100) : 0;
+    effLabel='Discount (manual override)'; effId='custom';
+  }
+  else if(ov.mode==='none'){ effAmount=0; }
+  else if(ov.mode==='tier'){ const o=options.find(x=>x.id===ov.tierId); if(o){ effPercent=o.percent; effLabel=o.label; effId=o.id; effAmount=round2(base*effPercent/100); } }
   else {
     const today=todayISO();
     const avail=options.filter(o=>!o.deadline || o.deadline>=today || ov.keepAvailable);
-    if(avail.length){ const best=avail.reduce((a,b)=>b.percent>a.percent?b:a); effPercent=best.percent; effLabel=best.label; effId=best.id; }
+    if(avail.length){ const best=avail.reduce((a,b)=>b.percent>a.percent?b:a); effPercent=best.percent; effLabel=best.label; effId=best.id; effAmount=round2(base*effPercent/100); }
   }
-  return {options, effAmount:round2(base*effPercent/100), effPercent, effLabel, effId};
+  return {options, effAmount, effPercent, effLabel, effId};
 }
 
 /* full breakdown incl. per-matter discounts */
@@ -1557,7 +1562,7 @@ function invItemsHtml(inv, b){
       const fs=invFeeSections(mt.entries, billed);
       const net=round2(mt.subtotal - mt.discountApplied);
       const discRows = mt.discountApplied>0.005
-        ? `<div class="r disc"><span>Less discount (${num(mt.discountPercent)}%)</span><span>-${money(mt.discountApplied)}</span></div>
+        ? `<div class="r disc"><span>Less discount${mt.discountId==='custom'?'':` (${num(mt.discountPercent)}%)`}</span><span>-${money(mt.discountApplied)}</span></div>
            <div class="r tot"><span>Matter total — ${esc(m?m.name:'')}</span><span>${money(net)}</span></div>`
         : '';
       return `<div class="matter-grp">
@@ -1592,7 +1597,9 @@ function openInvoiceDoc(invId){
 
   // Discount line label: a single % when one matter is discounted, else a plain "Discounts".
   const discMatters = b.matters.filter(m=>m.discountApplied>0.005);
-  const discTotalLabel = discMatters.length===1 ? `Discount (${num(discMatters[0].discountPercent)}%)` : 'Less: Discounts';
+  const discTotalLabel = discMatters.length===1
+    ? (discMatters[0].discountId==='custom' ? 'Discount' : `Discount (${num(discMatters[0].discountPercent)}%)`)
+    : 'Less: Discounts';
 
   const trustBal = trustBalance(inv.clientId);
   const isDraft = inv.status==='draft';
@@ -1813,7 +1820,7 @@ function editInvoiceLines(inv){
     inv.matterIds=mids;
     inv.matterNames=mids.map(id=>matterById(id)?.name).filter(Boolean).join(', ');
     inv.matterDiscounts=inv.matterDiscounts||{};
-    mids.forEach(mid=>{ if(!inv.matterDiscounts[mid]){ const m=matterById(mid); inv.matterDiscounts[mid]={snapshot:(m&&m.discount)?JSON.parse(JSON.stringify(m.discount)):{type:'none',appliesTo:'hourly',note:'',tiers:[]}, override:{mode:'auto',tierId:'',customPct:0,keepAvailable:false}}; } });
+    mids.forEach(mid=>{ if(!inv.matterDiscounts[mid]){ const m=matterById(mid); inv.matterDiscounts[mid]={snapshot:(m&&m.discount)?JSON.parse(JSON.stringify(m.discount)):{type:'none',appliesTo:'hourly',note:'',tiers:[]}, override:{mode:'auto',tierId:'',customAmt:0,keepAvailable:false}}; } });
     Object.keys(inv.matterDiscounts).forEach(mid=>{ if(!mids.includes(mid)) delete inv.matterDiscounts[mid]; });
     computeInvoiceTotals(inv); save(); openInvoiceDoc(inv.id); return true;
   }, null, 'Save Draft');
@@ -1851,7 +1858,7 @@ function editDiscount(inv){
           <label class="chk" style="margin:5px 0"><input type="radio" name="ovm_${idx}" value="auto" ${ov.mode==='auto'?'checked':''}> Automatic (deadline-based)</label>
           <label class="chk" style="margin:5px 0"><input type="radio" name="ovm_${idx}" value="none" ${ov.mode==='none'?'checked':''}> No discount applied</label>
           ${mt.options.map(o=>`<label class="chk" style="margin:5px 0"><input type="radio" name="ovm_${idx}" value="tier:${o.id}" ${ov.mode==='tier'&&ov.tierId===o.id?'checked':''}> Force apply: ${esc(o.label)} (${num(o.percent)}% = -${money(o.amount)})</label>`).join('')}
-          <label class="chk" style="margin:5px 0"><input type="radio" name="ovm_${idx}" value="custom" ${ov.mode==='custom'?'checked':''}> Custom override %: <input type="number" id="ovpct_${idx}" value="${ov.customPct||0}" step="0.5" style="width:80px;margin-left:6px"></label>
+          <label class="chk" style="margin:5px 0"><input type="radio" name="ovm_${idx}" value="custom" ${ov.mode==='custom'?'checked':''}> Custom override — flat $ <input type="number" id="ovamt_${idx}" value="${ov.customAmt!=null?ov.customAmt:(ov.customPct?round2(mt.base*ov.customPct/100):0)}" step="0.01" min="0" style="width:100px;margin:0 6px"> off <span class="small muted">(discountable fees: ${money(mt.base)})</span></label>
           <label class="chk" style="margin-top:6px"><input type="checkbox" id="ovkeep_${idx}" ${ov.keepAvailable?'checked':''}> Extend eligibility past deadline</label>
         </fieldset>`;
       }).join('');
@@ -1862,7 +1869,7 @@ function editDiscount(inv){
       const v=document.querySelector(`input[name="ovm_${idx}"]:checked`)?.value||'auto';
       if(v==='auto'){ ov.mode='auto'; ov.tierId=''; }
       else if(v==='none'){ ov.mode='none'; ov.tierId=''; }
-      else if(v==='custom'){ ov.mode='custom'; ov.customPct=Number(document.getElementById('ovpct_'+idx).value)||0; }
+      else if(v==='custom'){ ov.mode='custom'; ov.customAmt=Number(document.getElementById('ovamt_'+idx).value)||0; delete ov.customPct; }
       else if(v.startsWith('tier:')){ ov.mode='tier'; ov.tierId=v.slice(5); }
       ov.keepAvailable=document.getElementById('ovkeep_'+idx).checked;
     });
