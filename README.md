@@ -99,9 +99,17 @@ when an invoice is issued.
 **Statements of Account** — per-client roll-up of all invoices, payments,
 balances, and current trust balance. Printable.
 
-**Firm Settings** — firm identity, bar number, trust-account details, invoice/
-retainer numbering, default terms, timekeepers &amp; rates, and JSON
-**export/import backup**.
+**Multiple billing companies** — bill from more than one entity (e.g. CM Advisory
+Corp and Cre8, LLC). Each company has its own **letterhead/logo, invoice &amp;
+retainer numbering, trust account, tax, payment terms, and late-fee settings**.
+Each client is assigned a **billing company** (Clients &amp; Matters), which flows to
+its invoices, statements, and retainer requests; the New Invoice dialog lets you
+confirm or override the company per invoice.
+
+**Firm Settings** — pick a **billing company** to edit its identity, bar number,
+trust-account details, numbering, terms, tax, and late fees; add or remove
+companies; plus timekeepers &amp; rates, description templates, recurring charges,
+and JSON **export/import backup**.
 
 ## Data &amp; backups
 

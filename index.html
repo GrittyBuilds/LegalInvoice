@@ -304,37 +304,63 @@ function migrate(db){
       });
     }
   });
+  // Multi-firm: wrap the single firm into firms[] and add Cre8, LLC as a second billing entity.
+  if(!Array.isArray(db.firms)){
+    if(!f.id) f.id = uid('firm');
+    const cre8 = makeFirm({ name:'Cre8, LLC', invoicePrefix:'CRE-', nextInvoiceNo:1001,
+      retainerPrefix:'CRE-RET-', creditPrefix:'CRE-CR-',
+      taxRate:f.taxRate, taxLabel:f.taxLabel, defaultTermsDays:f.defaultTermsDays, terms:f.terms,
+      expenseMarkupDefault:f.expenseMarkupDefault, autoApplyTrust:f.autoApplyTrust,
+      trustNotice:f.trustNotice, lateFee:JSON.parse(JSON.stringify(f.lateFee||{})) });
+    db.firms=[f, cre8];
+  }
+  delete db.firm; // no longer stored separately — primaryFirm() is firms[0]
+  (db.clients||[]).forEach(c=>{ if(!c.firmId) c.firmId = db.firms[0].id; });
+  (db.invoices||[]).forEach(inv=>{ if(!inv.firmId){ const c=(db.clients||[]).find(x=>x.id===inv.clientId); inv.firmId = (c&&c.firmId)||db.firms[0].id; } });
   return db;
 }
 function save(){ localStorage.setItem(LS_KEY, JSON.stringify(DB)); }
 
+/* Billing-entity (firm/company) factory — a full billing profile. */
+function makeFirm(opts){
+  return Object.assign({
+    id:uid('firm'), name:'', line1:'', city:'', state:'MI', zip:'',
+    phone:'', fax:'', website:'', logo:'', tagline:'', email:'', barNo:'', ein:'',
+    trustBank:'', trustAcct:'',
+    invoicePrefix:'INV-', nextInvoiceNo:1001,
+    retainerPrefix:'RET-', nextRetainerNo:1,
+    creditPrefix:'CM-', nextCreditNo:1,
+    terms:'Payment due within 30 days of invoice date.',
+    defaultTermsDays:30, taxRate:0, taxLabel:'Sales Tax', expenseMarkupDefault:0,
+    lateFee:{enabled:false, type:'percent', rate:1.5, graceDays:0, label:'Finance charge on past-due balance'},
+    autoApplyTrust:true,
+    trustNotice:'Advance fees and costs are deposited in the firm’s IOLTA client trust account and disbursed only as earned or incurred, in accordance with MRPC 1.15.'
+  }, opts||{});
+}
+
 function seed(){
   const clientId = uid('cl');
   const matterId = uid('mt');
+  const cm = makeFirm({
+    name:'CM Advisory Corp', line1:'7457 Franklin Road, Suite 250',
+    city:'Bloomfield Hills', state:'Michigan', zip:'48301',
+    phone:'(248) 765-5427', fax:'(248) 859-2985',
+    logo:BRAND_LOGO, tagline:BRAND_TAGLINE, _letterhead:'cm', _brandLogo:1,
+    invoicePrefix:'CM-', nextInvoiceNo:1001, retainerPrefix:'CM-RET-', creditPrefix:'CM-CR-'
+  });
+  const cre8 = makeFirm({
+    name:'Cre8, LLC',
+    invoicePrefix:'CRE-', nextInvoiceNo:1001, retainerPrefix:'CRE-RET-', creditPrefix:'CRE-CR-'
+  });
   return {
-    firm:{
-      name:'CM Advisory Corp', line1:'7457 Franklin Road, Suite 250',
-      city:'Bloomfield Hills', state:'Michigan', zip:'48301',
-      phone:'(248) 765-5427', fax:'(248) 859-2985', website:'',
-      logo:BRAND_LOGO, tagline:BRAND_TAGLINE, _letterhead:'cm', _brandLogo:1,
-      email:'', barNo:'', ein:'',
-      trustBank:'', trustAcct:'', invoicePrefix:'INV-', nextInvoiceNo:1001,
-      retainerPrefix:'RET-', nextRetainerNo:1,
-      creditPrefix:'CM-', nextCreditNo:1,
-      terms:'Payment due within 30 days of invoice date.',
-      defaultTermsDays:30,
-      taxRate:0, taxLabel:'Sales Tax',
-      expenseMarkupDefault:0,
-      lateFee:{enabled:false, type:'percent', rate:1.5, graceDays:0, label:'Finance charge on past-due balance'},
-      autoApplyTrust:true,
-      trustNotice:'Advance fees and costs are deposited in the firm’s IOLTA client trust account and disbursed only as earned or incurred, in accordance with MRPC 1.15.'
-    },
+    firms: [cm, cre8], // firms[0] is the primary billing entity
+
     timekeepers:[
       {id:uid('tk'), name:'Attorney', initials:'ATT', rate:350, active:true}
     ],
     clients:[{
       id:clientId, name:'Sample Client, Inc.', line1:'', city:'', state:'MI', zip:'',
-      email:'', phone:'', contact:''
+      email:'', phone:'', contact:'', firmId:cm.id
     }],
     matters:[{
       id:matterId, clientId, name:'General Representation', number:'0001',
@@ -383,6 +409,11 @@ function matterById(id){ return DB.matters.find(m=>m.id===id); }
 function mattersFor(clientId){ return DB.matters.filter(m=>m.clientId===clientId); }
 function tkById(id){ return DB.timekeepers.find(t=>t.id===id); }
 function tkLabel(id){ const t=tkById(id); return t?`${t.name} (${t.initials})`:'—'; }
+/* Billing-entity resolvers */
+function primaryFirm(){ return DB.firms[0]; }
+function firmById(id){ return DB.firms.find(f=>f.id===id) || primaryFirm(); }
+function firmOfClient(clientId){ const c=clientById(clientId); return firmById(c&&c.firmId); }
+function firmOfInvoice(inv){ return firmById(inv&&(inv.firmId||firmOfClient(inv&&inv.clientId).id)); }
 
 /* entry amount recompute (expenses may carry a markup %) */
 function entryAmount(e){
@@ -406,7 +437,7 @@ const TABS = [
 ];
 
 function render(){
-  $('#brandName').textContent = DB.firm.name || 'Legal Billing';
+  $('#brandName').textContent = primaryFirm().name || 'Legal Billing';
   const nav = $('#nav');
   nav.innerHTML = TABS.map(t=>`<a data-tab="${t.id}" class="${DB.ui.tab===t.id?'active':''}"><span class="ic">${t.ic}</span>${t.label}</a>`).join('');
   nav.querySelectorAll('a').forEach(a=>a.onclick=()=>{ DB.ui.tab=a.dataset.tab; save(); render(); window.scrollTo(0,0); });
@@ -427,7 +458,7 @@ function viewDashboard(main){
   const wipOther = unbilledEntries().filter(e=>e.type!=='hourly').reduce((s,e)=>s+entryAmount(e),0);
 
   main.innerHTML = `
-    <div class="topbar"><div><h1>Dashboard</h1><div class="sub">${esc(DB.firm.name)} · ${fmtDate(todayISO())}</div></div></div>
+    <div class="topbar"><div><h1>Dashboard</h1><div class="sub">${DB.firms.map(f=>esc(f.name)).join(' · ')} · ${fmtDate(todayISO())}</div></div></div>
     <div class="grid g4" style="margin-bottom:18px">
       <div class="stat"><div class="k">Accounts Receivable</div><div class="v">${money(arTotal)}</div><div class="small muted">${openInv.length} open invoice(s)</div></div>
       <div class="stat"><div class="k">Client Trust (IOLTA)</div><div class="v">${money(trustTotal)}</div><div class="small muted">across ${DB.clients.length} client(s)</div></div>
@@ -448,7 +479,7 @@ function viewDashboard(main){
         ${DB.clients.length? `<table><thead><tr><th>Client</th><th class="num">Trust Balance</th></tr></thead><tbody>`+
           DB.clients.map(c=>`<tr><td>${esc(c.name)}</td><td class="num ${trustBalance(c.id)<0?'':''}">${money(trustBalance(c.id))}</td></tr>`).join('')+
           `</tbody></table>` : `<div class="empty">No clients yet.</div>`}
-        <div class="note small muted" style="margin-top:10px">${esc(DB.firm.trustNotice)}</div>
+        <div class="note small muted" style="margin-top:10px">${esc(primaryFirm().trustNotice)}</div>
       </div>
     </div>
 
@@ -479,12 +510,13 @@ function viewClients(main){
   list.innerHTML = DB.clients.map(c=>{
     const ms = mattersFor(c.id);
     return `<div class="card">
-      <h3>${esc(c.name)}
+      <h3>${esc(c.name)} <span class="tag info" style="font-weight:600">${esc(firmOfClient(c.id).name)}</span>
         <span class="r">
           <button class="btn sm sec" data-editcl="${c.id}">Edit</button>
           <button class="btn sm sec" data-addmt="${c.id}">＋ Matter</button>
         </span></h3>
       <div class="small muted" style="margin-bottom:6px">
+        Billed by ${esc(firmOfClient(c.id).name)} ·
         ${[c.line1, [c.city,c.state,c.zip].filter(Boolean).join(', ')].filter(Boolean).join(' · ')||'No address'}
         ${c.email?' · '+esc(c.email):''} ${c.phone?' · '+esc(c.phone):''}
       </div>
@@ -599,11 +631,14 @@ function commitDiscountFieldset(target){
 
 function editClient(c){
   const isNew=!c;
-  c = c ? JSON.parse(JSON.stringify(c)) : {id:uid('cl'), name:'', line1:'', city:'', state:'MI', zip:'', email:'', phone:'', contact:''};
+  c = c ? JSON.parse(JSON.stringify(c)) : {id:uid('cl'), name:'', line1:'', city:'', state:'MI', zip:'', email:'', phone:'', contact:'', firmId:primaryFirm().id};
+  if(!c.firmId) c.firmId=primaryFirm().id;
+  const cf = firmById(c.firmId);
   openModal(isNew?'New Client':'Edit Client', body=>{
     body.innerHTML = `
       <div class="grid g2">
         <div><label>Client name *</label><input id="c_name" value="${esc(c.name)}"></div>
+        <div><label>Bill from (company) *</label><select id="c_firm">${DB.firms.map(f=>`<option value="${f.id}"${f.id===c.firmId?' selected':''}>${esc(f.name)}</option>`).join('')}</select></div>
         <div><label>Contact person</label><input id="c_contact" value="${esc(c.contact)}"></div>
         <div><label>Address line</label><input id="c_line1" value="${esc(c.line1)}"></div>
         <div class="grid g3" style="gap:8px">
@@ -618,15 +653,15 @@ function editClient(c){
         <div class="grid g3">
           <div><label>Payment terms</label>
             <select id="c_terms">
-              <option value="">Firm default (${DB.firm.defaultTermsDays<=0?'Due on receipt':'Net '+DB.firm.defaultTermsDays})</option>
+              <option value="">Company default (${cf.defaultTermsDays<=0?'Due on receipt':'Net '+cf.defaultTermsDays})</option>
               <option value="0">Due on receipt</option>
               <option value="15">Net 15</option>
               <option value="30">Net 30</option>
               <option value="45">Net 45</option>
               <option value="60">Net 60</option>
             </select></div>
-          <div><label>Sales tax %</label><input type="number" id="c_tax" value="${c.taxRate!=null?c.taxRate:''}" placeholder="firm default ${num(DB.firm.taxRate||0)}%" step="0.001" min="0"></div>
-          <div><label>Expense markup %</label><input type="number" id="c_markup" value="${c.expenseMarkup!=null?c.expenseMarkup:''}" placeholder="firm default ${num(DB.firm.expenseMarkupDefault||0)}%" step="1" min="0"></div>
+          <div><label>Sales tax %</label><input type="number" id="c_tax" value="${c.taxRate!=null?c.taxRate:''}" placeholder="company default ${num(cf.taxRate||0)}%" step="0.001" min="0"></div>
+          <div><label>Expense markup %</label><input type="number" id="c_markup" value="${c.expenseMarkup!=null?c.expenseMarkup:''}" placeholder="company default ${num(cf.expenseMarkupDefault||0)}%" step="1" min="0"></div>
         </div>
       </fieldset>
       <div class="small muted" style="margin-top:10px">Discounts are configured per matter — set them when you add or edit a matter.</div>`;
@@ -635,7 +670,7 @@ function editClient(c){
     const g=id=>$('#'+id).value.trim();
     c.name=g('c_name'); if(!c.name){ alert('Client name is required.'); return false; }
     c.contact=g('c_contact'); c.line1=g('c_line1'); c.city=g('c_city'); c.state=g('c_state'); c.zip=g('c_zip');
-    c.email=g('c_email'); c.phone=g('c_phone');
+    c.email=g('c_email'); c.phone=g('c_phone'); c.firmId=$('#c_firm').value;
     const tv=$('#c_terms').value; c.termsDays = tv===''?null:Number(tv);
     const tax=$('#c_tax').value; c.taxRate = tax===''?null:Number(tax);
     const mk=$('#c_markup').value; c.expenseMarkup = mk===''?null:Number(mk);
@@ -777,7 +812,7 @@ function editEntry(e, type, presetMatter, prefill){
   const isNew=!e;
   type = e?e.type:type;
   const defaults = {id:uid('en'), matterId:presetMatter||'', type, date:todayISO(), tkId:DB.timekeepers[0]?.id||'',
-        desc:'', hours:0, rate:0, amount:0, markup:(type==='expense'?(DB.firm.expenseMarkupDefault||0):0), noCharge:false, ncNote:'No charge as a professional courtesy.', invoiceId:null};
+        desc:'', hours:0, rate:0, amount:0, markup:(type==='expense'?(primaryFirm().expenseMarkupDefault||0):0), noCharge:false, ncNote:'No charge as a professional courtesy.', invoiceId:null};
   e = e ? {...e} : {...defaults, ...(prefill||{}), id:uid('en'), type, invoiceId:null};
   openModal(isNew?('New '+(type==='hourly'?'Hourly Entry':type==='fixed'?'Fixed Fee':'Expense')):'Edit Entry', body=>{
     body.innerHTML=`
@@ -826,7 +861,7 @@ function editEntry(e, type, presetMatter, prefill){
     if(type==='expense'){
       $('#e_matter',body).addEventListener('change', ev=>{
         const m=matterById(ev.target.value), cl=m&&clientById(m.clientId);
-        const def = (cl && cl.expenseMarkup!=null) ? cl.expenseMarkup : (DB.firm.expenseMarkupDefault||0);
+        const def = (cl && cl.expenseMarkup!=null) ? cl.expenseMarkup : (firmOfClient(cl&&cl.id).expenseMarkupDefault||0);
         const mk=$('#e_markup',body); if(mk && (!Number(mk.value))) mk.value=def;
       });
     }
@@ -979,11 +1014,12 @@ function prevBalanceSnapshot(clientId, asOf, excludeInvId){
 function newInvoiceFlow(){
   if(!DB.clients.length){ alert('Create a client first.'); return; }
   // Default: include ALL of the client's matters on one invoice.
-  let sel = {clientId:DB.clients[0].id, matterIds:new Set(mattersFor(DB.clients[0].id).map(m=>m.id)), entryIds:new Set(), date:todayISO()};
+  let sel = {clientId:DB.clients[0].id, firmId:firmOfClient(DB.clients[0].id).id, matterIds:new Set(mattersFor(DB.clients[0].id).map(m=>m.id)), entryIds:new Set(), date:todayISO()};
   openModal('New Invoice — select work', body=>{
     body.innerHTML=`
-      <div class="grid g2">
+      <div class="grid g3">
         <div><label>Client *</label><select id="i_client">${DB.clients.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></div>
+        <div><label>Bill from (company)</label><select id="i_firm">${DB.firms.map(f=>`<option value="${f.id}">${esc(f.name)}</option>`).join('')}</select></div>
         <div><label>Invoice date</label><input type="date" id="i_date" value="${sel.date}"></div>
       </div>
       <div class="subhead">Matters to include</div>
@@ -993,7 +1029,9 @@ function newInvoiceFlow(){
       <div class="small muted" style="margin-bottom:6px">Only unbilled entries for the selected matter(s) are shown. No-charge items may be included; they print but don’t add to the total.</div>
       <div id="entryPick"></div>`;
     const cS=$('#i_client',body); cS.value=sel.clientId;
-    cS.onchange=()=>{ sel.clientId=cS.value; sel.matterIds=new Set(mattersFor(cS.value).map(m=>m.id)); sel.entryIds=new Set(); sel._touched=false; drawMatters(); drawEntries(); };
+    const fS=$('#i_firm',body); fS.value=sel.firmId;
+    cS.onchange=()=>{ sel.clientId=cS.value; sel.firmId=firmOfClient(cS.value).id; fS.value=sel.firmId; sel.matterIds=new Set(mattersFor(cS.value).map(m=>m.id)); sel.entryIds=new Set(); sel._touched=false; drawMatters(); drawEntries(); };
+    fS.onchange=()=>{ sel.firmId=fS.value; };
     $('#i_date',body).onchange=e=>sel.date=e.target.value;
     function drawMatters(){
       const ms=mattersFor(sel.clientId);
@@ -1038,13 +1076,16 @@ function newInvoiceFlow(){
 
 function invoiceDueDate(clientId, date){
   const c=clientById(clientId);
-  const days = (c && c.termsDays!=null) ? Number(c.termsDays) : Number(DB.firm.defaultTermsDays);
+  const fm=firmOfClient(clientId);
+  const days = (c && c.termsDays!=null) ? Number(c.termsDays) : Number(fm.defaultTermsDays);
   return (days<=0) ? date : addDays(date, days||0);
 }
 function createInvoice(sel, issue){
   const entryIds=[...sel.entryIds];
   const mids=[...new Set(entryIds.map(id=>DB.entries.find(e=>e.id===id).matterId))];
-  const number = DB.firm.invoicePrefix + (DB.firm.nextInvoiceNo++);
+  const client=clientById(sel.clientId);
+  const firm = firmById(sel.firmId || (client&&client.firmId));
+  const number = firm.invoicePrefix + (firm.nextInvoiceNo++);
   // Snapshot each matter's discount config + a per-matter override.
   const matterDiscounts={};
   mids.forEach(mid=>{
@@ -1054,16 +1095,15 @@ function createInvoice(sel, issue){
       override:{mode:'auto', tierId:'', customAmt:0, keepAvailable:false}
     };
   });
-  const client=clientById(sel.clientId);
-  const taxRate = (client && client.taxRate!=null) ? Number(client.taxRate) : Number(DB.firm.taxRate||0);
+  const taxRate = (client && client.taxRate!=null) ? Number(client.taxRate) : Number(firm.taxRate||0);
   const inv={
-    id:uid('inv'), number, clientId:sel.clientId, matterIds:mids,
+    id:uid('inv'), number, clientId:sel.clientId, firmId:firm.id, matterIds:mids,
     matterNames:mids.map(id=>matterById(id)?.name).filter(Boolean).join(', '),
     date:sel.date, dueDate:invoiceDueDate(sel.clientId, sel.date),
     entryIds,
     matterDiscounts,
     lineAdjust:{}, adjustment:{amount:0, label:'Adjustment'},
-    taxRate, taxLabel:(DB.firm.taxLabel||'Sales Tax'),
+    taxRate, taxLabel:(firm.taxLabel||'Sales Tax'),
     status: issue ? 'open' : 'draft', createdAt:todayISO()
   };
   computeInvoiceTotals(inv);
@@ -1117,15 +1157,16 @@ function batchInvoiceFlow(){
 function createInvoiceSilent(sel){
   const entryIds=[...sel.entryIds];
   const mids=[...new Set(entryIds.map(id=>DB.entries.find(e=>e.id===id).matterId))];
-  const number = DB.firm.invoicePrefix + (DB.firm.nextInvoiceNo++);
+  const client=clientById(sel.clientId);
+  const firm=firmById(sel.firmId || (client&&client.firmId));
+  const number = firm.invoicePrefix + (firm.nextInvoiceNo++);
   const matterDiscounts={};
   mids.forEach(mid=>{ const m=matterById(mid); matterDiscounts[mid]={snapshot:(m&&m.discount)?JSON.parse(JSON.stringify(m.discount)):{type:'none',appliesTo:'hourly',note:'',tiers:[]}, override:{mode:'auto',tierId:'',customAmt:0,keepAvailable:false}}; });
-  const client=clientById(sel.clientId);
-  const taxRate=(client&&client.taxRate!=null)?Number(client.taxRate):Number(DB.firm.taxRate||0);
-  const inv={id:uid('inv'), number, clientId:sel.clientId, matterIds:mids,
+  const taxRate=(client&&client.taxRate!=null)?Number(client.taxRate):Number(firm.taxRate||0);
+  const inv={id:uid('inv'), number, clientId:sel.clientId, firmId:firm.id, matterIds:mids,
     matterNames:mids.map(id=>matterById(id)?.name).filter(Boolean).join(', '),
     date:sel.date, dueDate:invoiceDueDate(sel.clientId, sel.date), entryIds, matterDiscounts,
-    lineAdjust:{}, adjustment:{amount:0,label:'Adjustment'}, taxRate, taxLabel:(DB.firm.taxLabel||'Sales Tax'),
+    lineAdjust:{}, adjustment:{amount:0,label:'Adjustment'}, taxRate, taxLabel:(firm.taxLabel||'Sales Tax'),
     status:'draft', createdAt:todayISO()};
   computeInvoiceTotals(inv);
   const snap=prevBalanceSnapshot(inv.clientId, inv.date, inv.id); inv.prevBalance=snap.prevBalance; inv.priorSnapshot=snap.priors;
@@ -1159,7 +1200,7 @@ function generateRecurringFlow(){
 
 /* When an invoice is issued, offer to draw the client's available trust balance against it. */
 function maybeAutoApplyTrust(inv){
-  if(!DB.firm.autoApplyTrust || !issued(inv)) return;
+  if(!firmOfInvoice(inv).autoApplyTrust || !issued(inv)) return;
   const tb=trustBalance(inv.clientId), bal=invoiceBalance(inv);
   if(tb<=0.005 || bal<=0.005) return;
   const amt=round2(Math.min(tb,bal));
@@ -1246,7 +1287,7 @@ function invoiceBreakdown(inv){
   const tax = round2(preTax * taxRate/100);
   const grand = round2(preTax + tax);
   return {entries, matters, hourly, fixed, expense, hourlyCharged, fixedTotal, expenseTotal,
-    subtotal, discountApplied, adjustment, preTax, taxRate, tax, taxLabel:(inv.taxLabel||DB.firm.taxLabel||'Sales Tax'), grandTotal:grand};
+    subtotal, discountApplied, adjustment, preTax, taxRate, tax, taxLabel:(inv.taxLabel||primaryFirm().taxLabel||'Sales Tax'), grandTotal:grand};
 }
 
 /* ---- payments ---- */
@@ -1349,7 +1390,7 @@ function applyPaymentFlow(opts={}){
     const allocations=Object.entries(state.alloc).filter(([,v])=>Number(v)>0).map(([invoiceId,amount])=>({invoiceId, amount:round2(amount)}));
     const rec={id:state.id, clientId:state.clientId, date:state.date, amount:round2(state.amount),
       method:state.method, note:state.note, allocations, kind};
-    if(isCredit) rec.number=DB.firm.creditPrefix+(DB.firm.nextCreditNo++);
+    if(isCredit){ const fm=firmOfClient(state.clientId); rec.number=fm.creditPrefix+(fm.nextCreditNo++); }
     DB.payments.push(rec);
     allocations.forEach(a=>{ const inv=DB.invoices.find(i=>i.id===a.invoiceId); if(inv) recomputeInvoiceStatus(inv); });
     save(); render(); return true;
@@ -1465,8 +1506,8 @@ function viewPayments(main){
    INVOICE / STATEMENT / RETAINER DOCUMENTS
    ========================================================================= */
 /* Branded letterhead masthead used at the top of every printed document. */
-function letterhead(){
-  const f=DB.firm;
+function letterhead(firm){
+  const f=firm||primaryFirm();
   const contactLines=[];
   const addr=[f.line1, cityStateZip(f.city,f.state,f.zip)].filter(Boolean);
   addr.forEach(a=>contactLines.push(esc(a)));
@@ -1582,6 +1623,7 @@ function openInvoiceDoc(invId){
   const inv=DB.invoices.find(i=>i.id===invId); if(!inv) return;
   computeInvoiceTotals(inv); save();
   const c=clientById(inv.clientId);
+  const firm=firmOfInvoice(inv);
   const b=invoiceBreakdown(inv);
   const paid=invoicePaid(inv), bal=invoiceBalance(inv);
 
@@ -1656,7 +1698,7 @@ function openInvoiceDoc(invId){
     </div>
     <div class="doc">
       ${isDraft?`<div style="background:var(--warn-soft);border:1px solid #e6d9a8;color:var(--warn);text-align:center;font-weight:700;letter-spacing:.12em;padding:6px;border-radius:5px;margin-bottom:12px">DRAFT — FOR REVIEW, NOT YET ISSUED</div>`:''}
-      ${letterhead()}
+      ${letterhead(firm)}
       <div class="meta">
         <div class="party">
           <div class="lbl">Bill To</div>
@@ -1669,7 +1711,7 @@ function openInvoiceDoc(invId){
             <tr><td>Invoice Date</td><td>${fmtDate(inv.date)}</td></tr>
             <tr><td>Payment Due</td><td>${fmtDate(inv.dueDate)}</td></tr>
             <tr><td>Matter(s)</td><td>${esc(inv.matterNames||'—')}</td></tr>
-            ${DB.firm.barNo?`<tr><td>Bar No.</td><td>${esc(DB.firm.barNo)}</td></tr>`:''}
+            ${firm.barNo?`<tr><td>Bar No.</td><td>${esc(firm.barNo)}</td></tr>`:''}
             ${statusChip?`<tr><td>Status</td><td>${statusChip}</td></tr>`:''}
           </table>
         </div>
@@ -1700,8 +1742,8 @@ function openInvoiceDoc(invId){
       </table>
 
       ${discountNotice(inv,b)}
-      ${trustBal>0?`<div class="note">Client trust (IOLTA) balance available: <b>${money(trustBal)}</b>. ${esc(DB.firm.trustNotice)}</div>`:''}
-      <div class="note"><b>Terms.</b> ${esc(DB.firm.terms)}</div>
+      ${trustBal>0?`<div class="note">Client trust (IOLTA) balance available: <b>${money(trustBal)}</b>. ${esc(firm.trustNotice)}</div>`:''}
+      <div class="note"><b>Terms.</b> ${esc(firm.terms)}</div>
       <div class="small muted" style="margin-top:14px">This invoice itemizes fees and costs in accordance with the Michigan Rules of Professional Conduct (MRPC 1.5). Please contact our office with any questions.</div>
 
       <div class="stub">
@@ -1709,7 +1751,7 @@ function openInvoiceDoc(invId){
         <div class="row2">
           <div>
             <div class="lbl">Remit payment to</div>
-            <div><b>${esc(DB.firm.name)}</b><br>${esc(DB.firm.line1)}<br>${esc(cityStateZip(DB.firm.city,DB.firm.state,DB.firm.zip))}</div>
+            <div><b>${esc(firm.name)}</b><br>${esc(firm.line1)}<br>${esc(cityStateZip(firm.city,firm.state,firm.zip))}</div>
           </div>
           <div class="box">
             <table class="metatable">
@@ -1991,7 +2033,7 @@ function recordTrust(type, clientId){
 
 function editRetainer(){
   if(!DB.clients.length){ alert('Create a client first.'); return; }
-  let r={id:uid('ret'), number:DB.firm.retainerPrefix+DB.firm.nextRetainerNo, clientId:DB.clients[0].id,
+  let r={id:uid('ret'), number:'', clientId:DB.clients[0].id,
     matterId:mattersFor(DB.clients[0].id)[0]?.id||'', date:todayISO(), amount:0,
     purpose:'advance fees and costs to be held in the firm’s IOLTA client trust account and applied to fees and expenses as earned or incurred', status:'requested'};
   openModal('New Retainer Request', body=>{
@@ -2008,7 +2050,8 @@ function editRetainer(){
     r.clientId=$('#r_client').value; r.matterId=$('#r_matter').value; r.date=$('#r_date').value;
     r.amount=round2(Number($('#r_amt').value)||0); r.purpose=$('#r_purpose').value;
     if(r.amount<=0){ alert('Enter a requested amount.'); return false; }
-    DB.retainers.push(r); DB.firm.nextRetainerNo++; save(); render(); openRetainerDoc(r.id); return true;
+    const fm=firmOfClient(r.clientId); r.number=fm.retainerPrefix+(fm.nextRetainerNo++);
+    DB.retainers.push(r); save(); render(); openRetainerDoc(r.id); return true;
   });
 }
 function fundRetainer(id){
@@ -2022,6 +2065,7 @@ function fundRetainer(id){
 }
 function openRetainerDoc(id){
   const r=DB.retainers.find(x=>x.id===id); const c=clientById(r.clientId); const m=matterById(r.matterId);
+  const firm=firmOfClient(r.clientId);
   const doc=`
     <div class="docbar noprint">
       <button class="btn" onclick="window.print()">🖨 Print / Save PDF</button>
@@ -2029,7 +2073,7 @@ function openRetainerDoc(id){
       <span class="spacer"></span><button class="btn sec" id="backBtn">← Back</button>
     </div>
     <div class="doc">
-      ${letterhead()}
+      ${letterhead(firm)}
       <div style="display:flex;justify-content:space-between;gap:20px;align-items:flex-start">
         <div><div class="lbl">To</div>${clientBlock(c)}</div>
         <div class="right"><h1 class="doctitle">RETAINER REQUEST</h1>
@@ -2043,9 +2087,9 @@ function openRetainerDoc(id){
       <div style="display:flex;justify-content:flex-end;margin-top:10px">
         <table style="width:320px"><tr class="grand"><td>Amount Requested</td><td class="num">${money(r.amount)}</td></tr></table>
       </div>
-      <div class="note">${esc(DB.firm.trustNotice)} Any portion of the advance not earned or expended will be refunded to you.</div>
-      ${DB.firm.trustBank||DB.firm.trustAcct?`<div class="note"><b>Remittance.</b> Please remit to the firm’s client trust account${DB.firm.trustBank?` at ${esc(DB.firm.trustBank)}`:''}${DB.firm.trustAcct?`, account ${esc(DB.firm.trustAcct)}`:''}, or by check payable to ${esc(DB.firm.name)} Client Trust Account (IOLTA).</div>`:''}
-      <div class="sig">Sincerely,<br><br>${esc(DB.firm.name)}${DB.firm.barNo?`<br><span class="small">Bar No. ${esc(DB.firm.barNo)}</span>`:''}</div>
+      <div class="note">${esc(firm.trustNotice)} Any portion of the advance not earned or expended will be refunded to you.</div>
+      ${firm.trustBank||firm.trustAcct?`<div class="note"><b>Remittance.</b> Please remit to the firm’s client trust account${firm.trustBank?` at ${esc(firm.trustBank)}`:''}${firm.trustAcct?`, account ${esc(firm.trustAcct)}`:''}, or by check payable to ${esc(firm.name)} Client Trust Account (IOLTA).</div>`:''}
+      <div class="sig">Sincerely,<br><br>${esc(firm.name)}${firm.barNo?`<br><span class="small">Bar No. ${esc(firm.barNo)}</span>`:''}</div>
     </div>`;
   showDoc(doc);
   $('#backBtn').onclick=()=>{ DB.ui.tab='trust'; save(); render(); };
@@ -2073,6 +2117,7 @@ function viewStatements(main){
 }
 function openStatementDoc(clientId, opts={}){
   const c=clientById(clientId);
+  const firm=firmOfClient(clientId);
   const invs=DB.invoices.filter(i=>i.clientId===clientId&&issued(i)).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
   const pays=DB.payments.filter(p=>p.clientId===clientId).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
   const ag=clientAging(clientId);
@@ -2095,7 +2140,7 @@ function openStatementDoc(clientId, opts={}){
     </div>
     <div class="doc">
       ${(opts.reminder||pastDue>0.005)?`<div style="background:var(--bad-soft);border:1px solid #edc3ba;color:var(--bad);text-align:center;font-weight:700;letter-spacing:.08em;padding:7px;border-radius:5px;margin-bottom:12px">PAYMENT REMINDER — ${money(pastDue)} PAST DUE</div>`:''}
-      ${letterhead()}
+      ${letterhead(firm)}
       <div class="meta">
         <div class="party"><div class="lbl">Client</div>${partyBlock(c)}</div>
         <div>
@@ -2154,8 +2199,8 @@ function openStatementDoc(clientId, opts={}){
         <tr class="rule"><td>Client trust (IOLTA) balance</td><td>${money(trustBal)}</td></tr>
       </table>
 
-      <div class="note"><b>Client Trust.</b> ${esc(DB.firm.trustNotice)}</div>
-      <div class="small muted" style="margin-top:14px">Prepared in accordance with the Michigan Rules of Professional Conduct. Please remit the balance due to ${esc(DB.firm.name)}.</div>
+      <div class="note"><b>Client Trust.</b> ${esc(firm.trustNotice)}</div>
+      <div class="small muted" style="margin-top:14px">Prepared in accordance with the Michigan Rules of Professional Conduct. Please remit the balance due to ${esc(firm.name)}.</div>
     </div>`;
   showDoc(doc);
   $('#backBtn').onclick=()=>{ DB.ui.tab='statements'; save(); render(); };
@@ -2171,11 +2216,11 @@ function pastDueBalance(clientId, graceDays){
 }
 /* Assess finance charges on past-due balances; posts a fixed-fee entry per eligible client (once/month). */
 function assessLateFeesFlow(){
-  const lf=DB.firm.lateFee||{};
-  if(!lf.enabled){ alert('Enable finance charges under Firm Settings → Billing Defaults first.'); return; }
+  if(!DB.firms.some(f=>f.lateFee&&f.lateFee.enabled)){ alert('Enable finance charges for a company under Firm Settings → Billing Defaults first.'); return; }
   const month=todayISO().slice(0,7);
   const cand=DB.clients.map(c=>{
-    if(c.lastFinanceCharge===month) return null;
+    const lf=firmOfClient(c.id).lateFee||{};
+    if(!lf.enabled || c.lastFinanceCharge===month) return null;
     const base=pastDueBalance(c.id, lf.graceDays||0);
     if(base<=0.005) return null;
     const charge = lf.type==='flat' ? round2(lf.rate||0) : round2(base*(lf.rate||0)/100);
@@ -2184,18 +2229,18 @@ function assessLateFeesFlow(){
     const overdue=DB.invoices.filter(i=>i.clientId===c.id && issued(i) && invoiceBalance(i)>0.005 && invoiceAgeDays(i)>(lf.graceDays||0)).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
     const matterId=(overdue[0]?.matterIds?.[0]) || mattersFor(c.id)[0]?.id;
     if(!matterId) return null;
-    return {c, base, charge, matterId};
+    return {c, base, charge, matterId, label:lf.label||'Finance charge on past-due balance'};
   }).filter(Boolean);
   openModal('Assess Finance Charges', body=>{
     body.innerHTML=`
-      <div class="small muted" style="margin-bottom:8px">${lf.type==='flat'?`Flat ${money(lf.rate)}`:`${num(lf.rate)}% per month`} on balances past due beyond ${lf.graceDays||0} day(s), as of ${fmtDate(todayISO())}. Posts one fixed-fee charge per client (once this month).</div>
+      <div class="small muted" style="margin-bottom:8px">Finance charges on balances past due, as of ${fmtDate(todayISO())}, using each client's billing company rate. Posts one fixed-fee charge per client (once this month).</div>
       ${cand.length? `<table><thead><tr><th>Client</th><th class="num">Past-due base</th><th class="num">Finance charge</th></tr></thead><tbody>`+
         cand.map(x=>`<tr><td>${esc(x.c.name)}</td><td class="num">${money(x.base)}</td><td class="num">${money(x.charge)}</td></tr>`).join('')+
         `</tbody></table>` : `<div class="small muted">No eligible past-due balances to assess this month.</div>`}`;
   }, ()=>{
     if(!cand.length) return true;
     cand.forEach(x=>{
-      DB.entries.push({id:uid('en'), matterId:x.matterId, type:'fixed', date:todayISO(), tkId:'', desc:lf.label||'Finance charge on past-due balance', hours:0, rate:0, amount:x.charge, noCharge:false, ncNote:'', invoiceId:null});
+      DB.entries.push({id:uid('en'), matterId:x.matterId, type:'fixed', date:todayISO(), tkId:'', desc:x.label, hours:0, rate:0, amount:x.charge, noCharge:false, ncNote:'', invoiceId:null});
       x.c.lastFinanceCharge=month;
     });
     save(); render();
@@ -2273,7 +2318,7 @@ function viewReports(main){
   main.innerHTML=`
     <div class="topbar"><div><h1>Reports</h1><div class="sub">A/R aging, collections &amp; revenue, as of ${fmtDate(todayISO())}</div></div>
       <div class="pill-row">
-        ${(DB.firm.lateFee&&DB.firm.lateFee.enabled)?`<button class="btn sec" id="assessLate">Assess finance charges…</button>`:''}
+        ${DB.firms.some(f=>f.lateFee&&f.lateFee.enabled)?`<button class="btn sec" id="assessLate">Assess finance charges…</button>`:''}
         <button class="btn sec" id="csvInv">⬇ Invoices CSV</button>
         <button class="btn sec" id="csvPay">⬇ Payments CSV</button>
         <button class="btn sec" id="csvTime">⬇ Time CSV</button>
@@ -2335,12 +2380,22 @@ function viewReports(main){
    FIRM SETTINGS
    ========================================================================= */
 function viewSettings(main){
-  const f=DB.firm;
+  if(!DB.ui.settingsFirmId || !DB.firms.some(x=>x.id===DB.ui.settingsFirmId)) DB.ui.settingsFirmId=primaryFirm().id;
+  const f=firmById(DB.ui.settingsFirmId);
+  const clientsUsing=cid=>DB.clients.filter(c=>c.firmId===cid).length;
   main.innerHTML=`
-    <div class="topbar"><div><h1>Firm Settings</h1><div class="sub">Firm identity, trust account, numbering, and default terms</div></div></div>
-    <div class="card"><h3>Firm Information</h3>
+    <div class="topbar"><div><h1>Firm Settings</h1><div class="sub">Billing companies, trust accounts, numbering, and defaults</div></div></div>
+    <div class="card"><h3>Billing Company
+        <span class="r">
+          <select id="firmSel" style="width:auto">${DB.firms.map(x=>`<option value="${x.id}"${x.id===f.id?' selected':''}>${esc(x.name)}${x.id===primaryFirm().id?' (primary)':''}</option>`).join('')}</select>
+          <button class="btn sm sec" id="addFirm">＋ Add company</button>
+          ${DB.firms.length>1?`<button class="btn sm danger" id="delFirm">Remove</button>`:''}
+        </span></h3>
+      <div class="small muted">Each company has its own letterhead, invoice numbering, trust account, tax, terms, and late-fee settings. Assign a company to each client under Clients &amp; Matters. Editing below applies to <b>${esc(f.name)}</b>.</div>
+    </div>
+    <div class="card"><h3>Company Information — ${esc(f.name)}</h3>
       <div class="grid g2">
-        <div><label>Firm name</label><input id="f_name" value="${esc(f.name)}"></div>
+        <div><label>Company name</label><input id="f_name" value="${esc(f.name)}"></div>
         <div><label>Attorney / Bar No.</label><input id="f_bar" value="${esc(f.barNo)}"></div>
         <div><label>Address line</label><input id="f_line1" value="${esc(f.line1)}"></div>
         <div class="grid g3" style="gap:8px">
@@ -2361,7 +2416,7 @@ function viewSettings(main){
         <div id="logoPrev">${f.logo?`<img src="${esc(f.logo)}" style="max-height:56px;max-width:120px;border:1px solid var(--line);border-radius:4px;padding:2px;background:#fff">`:'<span class="small muted">No logo</span>'}</div>
         ${f.logo?`<div><button class="btn ghost sm" id="f_logoclear">Remove logo</button></div>`:''}
       </div>
-      <div class="small muted" style="margin-top:6px">The logo (or, if none, the firm name in the brand emerald) prints at the top-left of every invoice, statement, and retainer request. The CM Advisory Corp brand lockup is preloaded — replace or remove it here to use your own.</div>
+      <div class="small muted" style="margin-top:6px">This company’s logo (or, if none, its name in the brand emerald) prints at the top-left of its invoices, statements, and retainer requests.</div>
     </div>
     <div class="card"><h3>Client Trust (IOLTA) Account</h3>
       <div class="grid g2">
@@ -2477,14 +2532,28 @@ function viewSettings(main){
       terms:g('f_terms')});
     save(); const m=$('#savedMsg'); m.style.display='inline-block'; setTimeout(()=>m.style.display='none',1500); render();
   };
+  $('#firmSel').onchange=e=>{ DB.ui.settingsFirmId=e.target.value; save(); viewSettings(main); };
+  $('#addFirm').onclick=()=>{
+    const name=prompt('New billing company name:'); if(!name||!name.trim()) return;
+    const nf=makeFirm({name:name.trim(), logo:'', tagline:'', invoicePrefix:'INV-', retainerPrefix:'RET-', creditPrefix:'CM-'});
+    DB.firms.push(nf); DB.ui.settingsFirmId=nf.id; save(); viewSettings(main);
+  };
+  const df=$('#delFirm'); if(df) df.onclick=()=>{
+    if(DB.firms.length<=1){ alert('Keep at least one company.'); return; }
+    const used=clientsUsing(f.id) || DB.invoices.some(i=>i.firmId===f.id);
+    if(used){ alert('Cannot remove: this company is assigned to clients or used on invoices. Reassign those first.'); return; }
+    if(f.id===primaryFirm().id){ alert('Cannot remove the primary company. Only additional companies can be removed.'); return; }
+    if(!confirm(`Remove billing company “${f.name}”?`)) return;
+    DB.firms=DB.firms.filter(x=>x.id!==f.id); DB.ui.settingsFirmId=primaryFirm().id; save(); viewSettings(main);
+  };
   $('#f_logofile').onchange=ev=>{
     const file=ev.target.files[0]; if(!file) return;
     if(file.size>600000){ alert('Please use a logo image under ~600 KB.'); return; }
     const rd=new FileReader();
-    rd.onload=()=>{ DB.firm.logo=rd.result; save(); viewSettings(main); };
+    rd.onload=()=>{ f.logo=rd.result; save(); viewSettings(main); };
     rd.readAsDataURL(file);
   };
-  const lc=$('#f_logoclear'); if(lc) lc.onclick=()=>{ DB.firm.logo=''; save(); viewSettings(main); };
+  const lc=$('#f_logoclear'); if(lc) lc.onclick=()=>{ f.logo=''; save(); viewSettings(main); };
   $('#exportBtn').onclick=exportData;
   $('#importBtn').onclick=()=>$('#importFile').click();
   $('#importFile').onchange=importData;
