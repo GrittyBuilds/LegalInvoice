@@ -1,8 +1,18 @@
-# Legal Billing &amp; Trust Manager
+# Tenth — Billing &amp; Trust for Law Firms
+
+*Bill to the tenth. Reconcile to the cent.*
 
 A single-file, **locally-stored** (no server, no internet required) web app for a
 Michigan legal practice. Open `index.html` in any modern browser — all data is
 saved in that browser's `localStorage`. Nothing is transmitted anywhere.
+
+The app ships the **Tenth** brand system: cobalt product identity, teal reserved
+exclusively for client-trust (IOLTA) money, Geist Sans/Mono embedded offline
+(figures are monospaced &amp; tabular), an embedded favicon, and a dark app shell that
+shows the product over the active billing company. Printed invoices, statements,
+and retainer requests stay **brand-neutral** — they carry each firm's own
+letterhead, not Tenth's. The full brand package (logo files, brand guide, design
+tokens, UI kit, go-to-market assets) is vendored under [`brand/`](brand/).
 
 > Built with the Michigan Rules of Professional Conduct in mind — itemized,
 > reasonable fees (**MRPC 1.5**) and safekeeping of client funds in a client
